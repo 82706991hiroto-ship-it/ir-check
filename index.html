@@ -4,6 +4,15 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>高配当株チェックシート — IRバンクで見る10項目</title>
+<meta name="description" content="IRバンクなどで決算の推移を見ながら10項目を入力すると、営業利益率・自己資本比率・配当性向・ROEなどを項目ごとに ◎○△❌ で判定します。登録不要。">
+<link rel="icon" href="data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%2064%2064%22%3E%3Crect%20width%3D%2264%22%20height%3D%2264%22%20rx%3D%2216%22%20fill%3D%22%23e8543f%22%2F%3E%3Ctext%20x%3D%2232%22%20y%3D%2245%22%20font-size%3D%2238%22%20font-family%3D%22Helvetica%2CArial%2Csans-serif%22%20font-weight%3D%22bold%22%20fill%3D%22%23fff%22%20text-anchor%3D%22middle%22%3E%E2%9C%93%3C%2Ftext%3E%3C%2Fsvg%3E">
+<meta property="og:type" content="website">
+<meta property="og:title" content="高配当株チェックシート — IRバンクで見る10項目">
+<meta property="og:description" content="IRバンクなどで決算の推移を見ながら10項目を入力すると、営業利益率・自己資本比率・配当性向・ROEなどを項目ごとに ◎○△❌ で判定します。登録不要。">
+<meta property="og:url" content="https://82706991hiroto-ship-it.github.io/ir-check/">
+<meta property="og:image" content="https://82706991hiroto-ship-it.github.io/ir-check/og.png">
+<meta property="og:site_name" content="高配当株チェックシート — IRバンクで見る10項目">
+<meta name="twitter:card" content="summary_large_image">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;500;700&display=swap" rel="stylesheet">
@@ -187,6 +196,22 @@
     .item-input input, .item-input select { font-size: 16px; padding: 10px; }
     .verdict { min-width: 3.6em; padding: 9px 10px; }
   }
+  /* 対になるサイトへの導線 */
+  .sibling {
+    display: flex; align-items: center; gap: 12px; text-decoration: none;
+    background: var(--card); border-radius: var(--radius); box-shadow: var(--shadow);
+    padding: 15px 18px; margin: 0 0 16px; color: var(--text);
+  }
+  .sibling:hover { background: var(--field); }
+  .sibling .ico {
+    width: 34px; height: 34px; border-radius: 10px; flex-shrink: 0;
+    background: var(--accent-soft); color: var(--accent);
+    display: flex; align-items: center; justify-content: center; font-weight: 700; font-size: 16px;
+  }
+  .sibling .txt { flex: 1; min-width: 0; }
+  .sibling .ttl { font-size: 13.5px; font-weight: 700; }
+  .sibling .sub { font-size: 11.5px; color: var(--text-2); margin-top: 3px; }
+  .sibling .arw { color: var(--muted); flex-shrink: 0; }
 </style>
 </head>
 <body>
@@ -240,6 +265,11 @@
     </div>
   </section>
 
+  <a class="sibling" href="../haito-dashboard/">
+    <span class="ico">¥</span>
+    <span class="txt"><span class="ttl">高配当株ポートフォリオダッシュボード</span><span class="sub">持っている株の配当構成比・カレンダー・増配率を見る</span></span>
+    <span class="arw">›</span>
+  </a>
   <footer class="foot">
     <span class="note-label">注記</span>判定の基準は筆者が高配当株を見るときに使っている目安で、絶対的な正解ではありません。数値はIRバンクなどでご自身で確認したものを入力してください。投資判断は自己責任で行ってください。
   </footer>
