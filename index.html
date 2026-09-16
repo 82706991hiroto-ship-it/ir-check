@@ -1,0 +1,664 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>高配当株チェックシート — IRバンクで見る10項目</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Zen+Kaku+Gothic+New:wght@400;500;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  :root {
+    color-scheme: light;
+    --font-sans: "Zen Kaku Gothic New", system-ui, -apple-system, "Hiragino Sans", "Yu Gothic", sans-serif;
+    --font-mono: "IBM Plex Mono", "SF Mono", Consolas, monospace;
+    --page: #fbfaf7;
+    --surface-2: #f2f0ea;
+    --text: #17233c;
+    --text-2: #4a5568;
+    --muted: #8a8f99;
+    --grid: #dad6cc;
+    --line: #b9b5ab;
+    --indigo: #17233c;
+    --indigo-ink: #fbfaf7;
+    --vermillion: #b3282d;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      color-scheme: dark;
+      --page: #1a1c17;
+      --surface-2: #2d2f27;
+      --text: #f0ece0;
+      --text-2: #b9b2a0;
+      --muted: #8c8676;
+      --grid: #3a3b32;
+      --line: #4a4b40;
+      --indigo: #6a8cb8;
+      --indigo-ink: #16211d;
+      --vermillion: #d47058;
+    }
+  }
+  * { box-sizing: border-box; }
+  html, body {
+    margin: 0; padding: 0;
+    background: var(--page); color: var(--text);
+    font-family: var(--font-sans);
+  }
+  .app { max-width: 1000px; margin: 0 auto; padding: 0 20px 80px; }
+
+  header.top {
+    margin: 0 0 36px; padding: 26px 0 18px;
+    border-top: 4px double var(--text); border-bottom: 4px double var(--text);
+    display: flex; justify-content: space-between; align-items: flex-end; gap: 24px; flex-wrap: wrap;
+  }
+  header.top h1 { font-weight: 700; font-size: 21px; letter-spacing: .14em; margin: 0; }
+  header.top p { margin: 10px 0 0; max-width: 56ch; color: var(--text-2); font-size: 13px; line-height: 1.8; }
+  header.top .dateline { font-family: var(--font-mono); font-size: 11.5px; color: var(--text-2); white-space: nowrap; padding-bottom: 4px; }
+
+  .panel { margin: 0 0 44px; }
+  .panel h2 {
+    font-size: 13px; margin: 0 0 20px; font-weight: 700; letter-spacing: .14em;
+    padding-bottom: 9px; border-bottom: 2px solid var(--text);
+  }
+  .panel h2 .chap { display: inline-block; min-width: 2.4em; color: var(--text-2); }
+  .panel h2 .hint { font-weight: 400; letter-spacing: 0; font-size: 12px; color: var(--muted); float: right; }
+
+  /* 銘柄の見出し */
+  .subject { display: flex; gap: 22px; flex-wrap: wrap; align-items: flex-end; margin-bottom: 8px; }
+  .subject label { display: flex; flex-direction: column; gap: 6px; font-size: 12px; color: var(--text-2); }
+  .subject input {
+    font-size: 15px; padding: 6px 2px; border: none; border-bottom: 1px solid var(--line);
+    background: none; color: var(--text); border-radius: 0; min-width: 8em;
+  }
+  .subject input#subjCode { font-family: var(--font-mono); max-width: 7em; }
+  input:focus, select:focus, textarea:focus, button:focus-visible {
+    outline: 2px solid var(--indigo); outline-offset: 2px;
+  }
+
+  /* 判定カード */
+  .items { border-top: 1px solid var(--text); }
+  .item {
+    display: grid; grid-template-columns: 2.2em 1fr 12em 5em;
+    gap: 0 16px; align-items: start;
+    padding: 16px 0; border-bottom: 1px solid var(--grid);
+  }
+  .item-no { font-family: var(--font-mono); font-size: 13px; color: var(--muted); padding-top: 2px; }
+  .item-name { font-weight: 700; font-size: 14px; }
+  .item-name .star { color: var(--vermillion); margin-left: 5px; font-size: 11px; letter-spacing: .08em; }
+  .item-rule { font-size: 12px; color: var(--text-2); line-height: 1.8; margin-top: 5px; }
+  .item-input { padding-top: 1px; }
+  .item-input input, .item-input select {
+    width: 100%; font-size: 14px; padding: 6px 2px; border: none;
+    border-bottom: 1px solid var(--line); background: none; color: var(--text); border-radius: 0;
+  }
+  .item-input input { font-family: var(--font-mono); }
+  .item-input .unit { font-size: 11px; color: var(--muted); margin-left: 6px; }
+  .verdict {
+    font-family: var(--font-mono); font-size: 21px; font-weight: 600;
+    text-align: right; padding-top: 1px;
+  }
+  .verdict small { display: block; font-family: var(--font-sans); font-size: 10.5px; font-weight: 400; letter-spacing: .04em; margin-top: 3px; }
+  .v-good { color: var(--text); }
+  .v-ok { color: var(--text-2); }
+  .v-mid { color: var(--muted); }
+  .v-bad { color: var(--vermillion); }
+  .v-none { color: var(--muted); }
+
+  /* 総合 */
+  .tally { display: flex; flex-wrap: wrap; gap: 8px 0; padding: 22px 0; border-bottom: 1px solid var(--grid); margin-bottom: 20px; }
+  .tally .stat { padding: 0 28px; border-right: 1px solid var(--grid); }
+  .tally .stat:first-child { padding-left: 0; }
+  .tally .stat:last-child { border-right: none; }
+  .tally .label { font-size: 10.5px; letter-spacing: .08em; color: var(--muted); margin-bottom: 7px; }
+  .tally .value { font-family: var(--font-mono); font-size: 26px; font-weight: 600; }
+  .tally .value.is-bad { color: var(--vermillion); }
+  .tally .unit { font-family: var(--font-sans); font-size: 11px; font-weight: 400; color: var(--text-2); margin-left: 3px; }
+
+  .readout { font-size: 13.5px; line-height: 1.9; margin: 0 0 6px; }
+  .readout strong { font-weight: 700; }
+  .readout.is-bad strong { color: var(--vermillion); }
+  .caveats { margin: 18px 0 0; padding: 0 0 0 1.1em; font-size: 12.5px; color: var(--text-2); line-height: 1.9; }
+
+  button.btn {
+    font-size: 13px; padding: 9px 4px; border-radius: 0; letter-spacing: .04em;
+    border: none; border-bottom: 1px solid var(--text); background: none; color: var(--text); cursor: pointer;
+  }
+  button.btn:hover { color: var(--indigo); border-bottom-color: var(--indigo); }
+  button.btn.primary { background: var(--indigo); color: var(--indigo-ink); padding: 10px 20px; border-bottom-color: var(--indigo); }
+  button.btn.primary:hover { opacity: .88; }
+  .toolbar { display: flex; gap: 22px; flex-wrap: wrap; align-items: center; margin-top: 18px; }
+  .toolbar-status { font-size: 12px; color: var(--text-2); }
+
+  table.saved { width: 100%; border-collapse: collapse; font-size: 13px; }
+  table.saved thead th { border-bottom: 2px solid var(--text); }
+  table.saved th, table.saved td { padding: 9px 7px; border-bottom: 1px solid var(--grid); text-align: left; white-space: nowrap; }
+  table.saved th { color: var(--text-2); font-weight: 600; font-size: 10.5px; letter-spacing: .08em; }
+  table.saved td.num { font-family: var(--font-mono); }
+  table.saved td.bad { color: var(--vermillion); }
+  .saved-wrap { overflow-x: auto; }
+  .row-actions button { background: none; border: none; border-bottom: 1px solid var(--line); color: var(--text-2); cursor: pointer; font-size: 12px; padding: 2px 0; margin-right: 14px; }
+  .row-actions button:hover { color: var(--vermillion); border-bottom-color: var(--vermillion); }
+  .empty-note { color: var(--muted); font-size: 13px; padding: 18px 0; }
+
+  footer.foot { color: var(--text-2); font-size: 12px; margin-top: 44px; padding-top: 18px; border-top: 4px double var(--text); line-height: 1.9; }
+  footer.foot .note-label { font-weight: 700; letter-spacing: .1em; margin-right: 8px; }
+  footer.foot a { color: var(--text-2); }
+
+  @media (max-width: 720px) {
+    .panel h2 .hint { float: none; display: block; margin-top: 6px; }
+    .item { grid-template-columns: 1.8em 1fr; gap: 4px 12px; }
+    .item-input { grid-column: 2; padding-top: 8px; }
+    .verdict { grid-column: 2; text-align: left; font-size: 19px; padding-top: 8px; }
+    .verdict small { display: inline; margin-left: 8px; }
+    .tally .stat { padding: 0 18px 12px; border-right: none; }
+  }
+</style>
+</head>
+<body>
+<div class="app">
+  <header class="top">
+    <div>
+      <h1>高配当株チェックシート</h1>
+      <p>IRバンクなどで決算の推移を見ながら10項目を埋めると、項目ごとに ◎ ○ △ ❌ を判定します。入力内容はこの端末のブラウザ内(localStorage)にのみ保存されます。</p>
+    </div>
+    <div class="dateline" id="dateline"></div>
+  </header>
+
+  <section class="panel">
+    <h2><span class="chap">一</span>対象銘柄</h2>
+    <div class="subject">
+      <label>証券コード<input type="text" id="subjCode" inputmode="numeric" placeholder="8306"></label>
+      <label>銘柄名<input type="text" id="subjName" placeholder="三菱UFJ"></label>
+    </div>
+  </section>
+
+  <section class="panel">
+    <h2><span class="chap">二</span>10項目のチェック <span class="hint">★は特に重視する項目</span></h2>
+    <div class="items" id="items"></div>
+  </section>
+
+  <section class="panel">
+    <h2><span class="chap">三</span>総合</h2>
+    <div class="tally" id="tally"></div>
+    <p class="readout" id="readout"></p>
+    <ul class="caveats">
+      <li>配当性向が安定していて増配を続けている会社は投資候補。</li>
+      <li>配当性向が高まっていたり、EPSの成長が鈍化しているのに減配しない会社は注意。</li>
+    </ul>
+    <div class="toolbar">
+      <button class="btn primary" id="saveBtn">この評価を保存</button>
+      <button class="btn" id="copyBtn">Markdownでコピー</button>
+      <button class="btn" id="resetBtn">入力をクリア</button>
+      <span class="toolbar-status" id="toolbarStatus"></span>
+    </div>
+  </section>
+
+  <section class="panel">
+    <h2><span class="chap">四</span>保存した評価</h2>
+    <div class="saved-wrap">
+      <table class="saved" id="savedTable">
+        <thead>
+          <tr><th>評価日</th><th>コード</th><th>銘柄名</th><th>◎</th><th>○</th><th>△</th><th>❌</th><th>重要4項目</th><th></th></tr>
+        </thead>
+        <tbody id="savedBody"></tbody>
+      </table>
+    </div>
+  </section>
+
+  <footer class="foot">
+    <span class="note-label">注記</span>判定の基準は筆者が高配当株を見るときに使っている目安で、絶対的な正解ではありません。数値はIRバンクなどでご自身で確認したものを入力してください。投資判断は自己責任で行ってください。
+  </footer>
+</div>
+
+<script>
+(function () {
+  "use strict";
+
+  var STORAGE_KEY = "irCheckV1";
+
+  // 判定の段階。数が小さいほど良い。
+  var GOOD = "good", OK = "ok", MID = "mid", BAD = "bad", NONE = "none";
+  var MARK = { good: "◎", ok: "○", mid: "△", bad: "❌", none: "—" };
+  var MARK_CLASS = { good: "v-good", ok: "v-ok", mid: "v-mid", bad: "v-bad", none: "v-none" };
+
+  function selectItem(options) {
+    return {
+      type: "select",
+      options: options,
+      judge: function (v) {
+        if (!v) return { level: NONE, note: "" };
+        var hit = options.filter(function (o) { return o.value === v; })[0];
+        return hit ? { level: hit.level, note: hit.note || "" } : { level: NONE, note: "" };
+      }
+    };
+  }
+
+  function numberItem(unit, judge) {
+    return { type: "number", unit: unit, judge: function (v) {
+      if (v === "" || v === null || isNaN(parseFloat(v))) return { level: NONE, note: "" };
+      return judge(parseFloat(v));
+    } };
+  }
+
+  // ノートの記述をそのまま判定規則に落としたもの。
+  var ITEMS = [
+    {
+      key: "sales", name: "売上高", star: false,
+      rule: "右肩上がりか。増減が激しくないか。",
+      field: selectItem([
+        { value: "up", label: "右肩上がり", level: GOOD },
+        { value: "flat", label: "横ばい", level: OK },
+        { value: "unstable", label: "増減が激しい", level: BAD, note: "増減の激しさは要確認" },
+        { value: "down", label: "減少傾向", level: BAD }
+      ])
+    },
+    {
+      key: "eps", name: "EPS(1株あたり利益)", star: false,
+      rule: "右肩上がりならOK。",
+      field: selectItem([
+        { value: "up", label: "右肩上がり", level: GOOD },
+        { value: "flat", label: "横ばい", level: OK },
+        { value: "down", label: "下降・不安定", level: BAD }
+      ])
+    },
+    {
+      key: "opm", name: "営業利益率", star: true,
+      rule: "10%以上 → ◎ / 5%以下 → ❌",
+      field: numberItem("%", function (n) {
+        if (n >= 10) return { level: GOOD };
+        if (n <= 5) return { level: BAD };
+        return { level: OK, note: "5〜10%" };
+      })
+    },
+    {
+      key: "equity", name: "自己資本比率", star: true,
+      rule: "60%以上 → ◎ / 40%以上 → ○ / 10%以下 → ❌",
+      field: numberItem("%", function (n) {
+        if (n >= 60) return { level: GOOD };
+        if (n >= 40) return { level: OK };
+        if (n <= 10) return { level: BAD, note: "借入が多い" };
+        return { level: MID, note: "40%未満" };
+      })
+    },
+    {
+      key: "cf", name: "営業活動によるCF", star: false,
+      rule: "毎年黒字 → ◎ / 長期で増加傾向 → ◎ / 10年で1回でも赤字 → ❌",
+      field: selectItem([
+        { value: "growing", label: "毎年黒字で増加傾向", level: GOOD },
+        { value: "positive", label: "毎年黒字", level: GOOD },
+        { value: "negative", label: "10年で赤字の年がある", level: BAD }
+      ])
+    },
+    {
+      key: "cash", name: "現金等", star: false,
+      rule: "長期的に増えているのが良い。",
+      field: selectItem([
+        { value: "up", label: "長期的に増加", level: GOOD },
+        { value: "flat", label: "横ばい", level: OK },
+        { value: "down", label: "減少傾向", level: MID }
+      ])
+    },
+    {
+      key: "dividend", name: "1株あたり配当金", star: true,
+      rule: "安定性(減配・無配がないか)と成長性(連続増配か)。",
+      field: selectItem([
+        { value: "growing", label: "連続増配", level: GOOD },
+        { value: "stable", label: "安定(減配なし)", level: OK },
+        { value: "cut", label: "減配・無配がある", level: BAD }
+      ])
+    },
+    {
+      key: "payout", name: "配当性向", star: false,
+      rule: "30〜50% → ◎ / 70〜80%超 → ❌ / 30%以下は高配当株には向かない",
+      field: numberItem("%", function (n) {
+        if (n >= 30 && n <= 50) return { level: GOOD };
+        if (n > 70) return { level: BAD, note: "高すぎる" };
+        if (n < 30) return { level: MID, note: "低すぎる" };
+        return { level: OK, note: "50〜70%" };
+      })
+    },
+    {
+      key: "pbr", name: "PBR(株価純資産倍率)", star: false,
+      rule: "目安は1倍。0.5〜1.5倍の範囲。1倍を下回ると割安、超えると割高。",
+      field: numberItem("倍", function (n) {
+        if (n >= 0.5 && n <= 1) return { level: GOOD, note: "割安寄り" };
+        if (n > 1 && n <= 1.5) return { level: OK };
+        if (n > 1.5) return { level: BAD, note: "割高" };
+        return { level: MID, note: "0.5倍未満" };
+      })
+    },
+    {
+      key: "roe", name: "ROE(自己資本利益率)", star: true,
+      rule: "8%以上。自己資本をどれだけ効率的に運用できているか。",
+      field: numberItem("%", function (n) {
+        if (n >= 8) return { level: GOOD };
+        if (n >= 5) return { level: MID, note: "8%未満" };
+        return { level: BAD };
+      })
+    }
+  ];
+
+  var STAR_KEYS = ITEMS.filter(function (i) { return i.star; }).map(function (i) { return i.key; });
+
+  function loadState() {
+    var raw = null;
+    try { raw = localStorage.getItem(STORAGE_KEY); } catch (e) {}
+    var defaults = { subject: { code: "", name: "" }, values: {}, saved: [] };
+    if (!raw) return defaults;
+    try {
+      var parsed = JSON.parse(raw);
+      return {
+        subject: Object.assign({}, defaults.subject, parsed.subject),
+        values: parsed.values || {},
+        saved: Array.isArray(parsed.saved) ? parsed.saved : []
+      };
+    } catch (e) { return defaults; }
+  }
+
+  var state = loadState();
+
+  function save() {
+    try { localStorage.setItem(STORAGE_KEY, JSON.stringify(state)); } catch (e) {}
+  }
+
+  function judgeAll() {
+    return ITEMS.map(function (item) {
+      var v = state.values[item.key];
+      var res = item.field.judge(v === undefined ? "" : v);
+      return { item: item, value: v, level: res.level, note: res.note || "" };
+    });
+  }
+
+  function labelOf(item, value) {
+    if (item.field.type === "select") {
+      var hit = item.field.options.filter(function (o) { return o.value === value; })[0];
+      return hit ? hit.label : "";
+    }
+    return (value === undefined || value === "") ? "" : value + (item.field.unit || "");
+  }
+
+  // ---------- 入力欄 ----------
+  function renderItems() {
+    var root = document.getElementById("items");
+    root.innerHTML = "";
+
+    ITEMS.forEach(function (item, idx) {
+      var row = document.createElement("div");
+      row.className = "item";
+      row.dataset.key = item.key;
+
+      var no = document.createElement("div");
+      no.className = "item-no";
+      no.textContent = (idx + 1);
+      row.appendChild(no);
+
+      var body = document.createElement("div");
+      body.innerHTML = '<div class="item-name">' + item.name +
+        (item.star ? '<span class="star">★重視</span>' : '') + '</div>' +
+        '<div class="item-rule">' + item.rule + '</div>';
+      row.appendChild(body);
+
+      var inputCell = document.createElement("div");
+      inputCell.className = "item-input";
+      var control;
+      if (item.field.type === "select") {
+        control = document.createElement("select");
+        var blank = document.createElement("option");
+        blank.value = ""; blank.textContent = "— 選択 —";
+        control.appendChild(blank);
+        item.field.options.forEach(function (o) {
+          var opt = document.createElement("option");
+          opt.value = o.value; opt.textContent = o.label;
+          control.appendChild(opt);
+        });
+        control.value = state.values[item.key] || "";
+      } else {
+        control = document.createElement("input");
+        control.type = "number";
+        control.step = "any";
+        control.inputMode = "decimal";
+        control.placeholder = item.field.unit === "倍" ? "1.0" : "0.0";
+        control.value = state.values[item.key] === undefined ? "" : state.values[item.key];
+      }
+      control.addEventListener("input", function () { onChange(item.key, control.value); });
+      control.addEventListener("change", function () { onChange(item.key, control.value); });
+      inputCell.appendChild(control);
+      if (item.field.unit) {
+        var unit = document.createElement("span");
+        unit.className = "unit";
+        unit.textContent = item.field.unit;
+        inputCell.appendChild(unit);
+      }
+      row.appendChild(inputCell);
+
+      var verdict = document.createElement("div");
+      verdict.className = "verdict";
+      row.appendChild(verdict);
+
+      root.appendChild(row);
+    });
+    renderVerdicts();
+  }
+
+  function onChange(key, value) {
+    if (value === "") delete state.values[key]; else state.values[key] = value;
+    save();
+    renderVerdicts();
+    renderTally();
+  }
+
+  function renderVerdicts() {
+    judgeAll().forEach(function (r) {
+      var cell = document.querySelector('.item[data-key="' + r.item.key + '"] .verdict');
+      if (!cell) return;
+      cell.className = "verdict " + MARK_CLASS[r.level];
+      cell.innerHTML = MARK[r.level] + (r.note ? '<small>' + r.note + '</small>' : '');
+    });
+  }
+
+  // ---------- 総合 ----------
+  function summarize() {
+    var results = judgeAll();
+    var counts = { good: 0, ok: 0, mid: 0, bad: 0, none: 0 };
+    results.forEach(function (r) { counts[r.level]++; });
+
+    var stars = results.filter(function (r) { return r.item.star; });
+    var starsFilled = stars.filter(function (r) { return r.level !== NONE; });
+    var starsPassing = stars.filter(function (r) { return r.level === GOOD || r.level === OK; });
+
+    return {
+      results: results, counts: counts,
+      answered: results.length - counts.none,
+      starTotal: stars.length,
+      starFilled: starsFilled.length,
+      starPassing: starsPassing.length,
+      badItems: results.filter(function (r) { return r.level === BAD; })
+    };
+  }
+
+  function renderTally() {
+    var s = summarize();
+    var el = document.getElementById("tally");
+    el.innerHTML =
+      '<div class="stat"><div class="label">◎</div><div class="value">' + s.counts.good + '<span class="unit">項目</span></div></div>' +
+      '<div class="stat"><div class="label">○</div><div class="value">' + s.counts.ok + '<span class="unit">項目</span></div></div>' +
+      '<div class="stat"><div class="label">△</div><div class="value">' + s.counts.mid + '<span class="unit">項目</span></div></div>' +
+      '<div class="stat"><div class="label">❌</div><div class="value' + (s.counts.bad > 0 ? ' is-bad' : '') + '">' + s.counts.bad + '<span class="unit">項目</span></div></div>' +
+      '<div class="stat"><div class="label">重要4項目(★)</div><div class="value">' + s.starPassing + '<span class="unit">/ ' + s.starTotal + ' が◎○</span></div></div>' +
+      '<div class="stat"><div class="label">入力済み</div><div class="value">' + s.answered + '<span class="unit">/ ' + s.results.length + '</span></div></div>';
+
+    var readout = document.getElementById("readout");
+    readout.className = "readout";
+    if (s.answered === 0) {
+      readout.textContent = "10項目を埋めると、ここに総合の読みが出ます。";
+      return;
+    }
+    if (s.counts.bad > 0) {
+      readout.classList.add("is-bad");
+      readout.innerHTML = "<strong>❌が" + s.counts.bad + "項目あります。</strong>" +
+        s.badItems.map(function (r) { return r.item.name; }).join("、") +
+        " が基準を外れています。とくに★の項目に❌があるときは見送りを検討してください。";
+    } else if (s.answered < s.results.length) {
+      readout.textContent = "いまのところ❌はありません。残り " + (s.results.length - s.answered) + " 項目を埋めると判断材料が揃います。";
+    } else if (s.starPassing === s.starTotal && s.counts.mid === 0) {
+      readout.innerHTML = "<strong>10項目すべてが基準内で、★の重要4項目も◎○です。</strong>投資候補として検討できる水準です。";
+    } else {
+      readout.innerHTML = "<strong>❌はありません。</strong>△が" + s.counts.mid + "項目あるので、その項目が許容できるかを確認してください。";
+    }
+  }
+
+  // ---------- 保存 ----------
+  function renderSaved() {
+    var tbody = document.getElementById("savedBody");
+    tbody.innerHTML = "";
+    if (state.saved.length === 0) {
+      var tr = document.createElement("tr");
+      var td = document.createElement("td");
+      td.colSpan = 9; td.className = "empty-note";
+      td.textContent = "「この評価を保存」を押すと、銘柄ごとの結果がここに残ります。";
+      tr.appendChild(td); tbody.appendChild(tr);
+      return;
+    }
+
+    state.saved.slice().reverse().forEach(function (entry) {
+      var tr = document.createElement("tr");
+      function td(text, cls) {
+        var c = document.createElement("td");
+        if (cls) c.className = cls;
+        c.textContent = text;
+        return c;
+      }
+      tr.appendChild(td(entry.date, "num"));
+      tr.appendChild(td(entry.code || "—", "num"));
+      tr.appendChild(td(entry.name || "—"));
+      tr.appendChild(td(entry.counts.good, "num"));
+      tr.appendChild(td(entry.counts.ok, "num"));
+      tr.appendChild(td(entry.counts.mid, "num"));
+      tr.appendChild(td(entry.counts.bad, "num" + (entry.counts.bad > 0 ? " bad" : "")));
+      tr.appendChild(td(entry.starPassing + " / " + entry.starTotal, "num"));
+
+      var actions = document.createElement("td");
+      actions.className = "row-actions";
+      var loadBtn = document.createElement("button");
+      loadBtn.textContent = "読み込む";
+      loadBtn.addEventListener("click", function () {
+        state.subject = { code: entry.code, name: entry.name };
+        state.values = Object.assign({}, entry.values);
+        save(); renderSubject(); renderItems(); renderTally();
+        setStatus("「" + (entry.name || entry.code) + "」を読み込みました。");
+        window.scrollTo({ top: 0, behavior: "smooth" });
+      });
+      var delBtn = document.createElement("button");
+      delBtn.textContent = "削除";
+      delBtn.addEventListener("click", function () {
+        state.saved = state.saved.filter(function (x) { return x.id !== entry.id; });
+        save(); renderSaved();
+      });
+      actions.appendChild(loadBtn); actions.appendChild(delBtn);
+      tr.appendChild(actions);
+
+      tbody.appendChild(tr);
+    });
+  }
+
+  function todayStamp() {
+    var d = new Date();
+    return d.getFullYear() + "-" + ("0" + (d.getMonth() + 1)).slice(-2) + "-" + ("0" + d.getDate()).slice(-2);
+  }
+
+  function setStatus(text) {
+    document.getElementById("toolbarStatus").textContent = text;
+  }
+
+  document.getElementById("saveBtn").addEventListener("click", function () {
+    var s = summarize();
+    if (s.answered === 0) { setStatus("先に項目を入力してください。"); return; }
+    state.saved.push({
+      id: Math.random().toString(36).slice(2, 10),
+      date: todayStamp(),
+      code: state.subject.code,
+      name: state.subject.name,
+      values: Object.assign({}, state.values),
+      counts: s.counts,
+      starPassing: s.starPassing,
+      starTotal: s.starTotal
+    });
+    save(); renderSaved();
+    setStatus("保存しました。");
+  });
+
+  // Obsidianなどに貼り付けられるよう、表形式のMarkdownで書き出す。
+  function buildMarkdown() {
+    var s = summarize();
+    var title = [state.subject.code, state.subject.name].filter(Boolean).join(" ") || "銘柄";
+    var lines = [];
+    lines.push("## " + title + " 高配当株チェック(" + todayStamp() + ")");
+    lines.push("");
+    lines.push("| 項目 | 入力 | 判定 |");
+    lines.push("|---|---|---|");
+    s.results.forEach(function (r) {
+      var name = r.item.name + (r.item.star ? " ★" : "");
+      lines.push("| " + name + " | " + (labelOf(r.item, r.value) || "—") + " | " + MARK[r.level] + (r.note ? "(" + r.note + ")" : "") + " |");
+    });
+    lines.push("");
+    lines.push("- 判定: ◎" + s.counts.good + " ○" + s.counts.ok + " △" + s.counts.mid + " ❌" + s.counts.bad);
+    lines.push("- 重要4項目(★): " + s.starPassing + " / " + s.starTotal + " が◎○");
+    if (s.badItems.length > 0) {
+      lines.push("- 基準を外れた項目: " + s.badItems.map(function (r) { return r.item.name; }).join("、"));
+    }
+    return lines.join("\n");
+  }
+
+  document.getElementById("copyBtn").addEventListener("click", function () {
+    var md = buildMarkdown();
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(md).then(function () {
+        setStatus("Markdownをコピーしました。");
+      }, function () { fallbackCopy(md); });
+    } else {
+      fallbackCopy(md);
+    }
+  });
+
+  function fallbackCopy(text) {
+    var ta = document.createElement("textarea");
+    ta.value = text;
+    ta.style.position = "fixed"; ta.style.opacity = "0";
+    document.body.appendChild(ta); ta.select();
+    try { document.execCommand("copy"); setStatus("Markdownをコピーしました。"); }
+    catch (e) { setStatus("コピーできませんでした。"); }
+    document.body.removeChild(ta);
+  }
+
+  document.getElementById("resetBtn").addEventListener("click", function () {
+    if (!confirm("入力内容をクリアします。保存済みの評価は残ります。")) return;
+    state.subject = { code: "", name: "" };
+    state.values = {};
+    save(); renderSubject(); renderItems(); renderTally();
+    setStatus("クリアしました。");
+  });
+
+  function renderSubject() {
+    document.getElementById("subjCode").value = state.subject.code || "";
+    document.getElementById("subjName").value = state.subject.name || "";
+  }
+
+  ["subjCode", "subjName"].forEach(function (id) {
+    document.getElementById(id).addEventListener("input", function (e) {
+      state.subject[id === "subjCode" ? "code" : "name"] = e.target.value;
+      save();
+    });
+  });
+
+  var d = new Date();
+  document.getElementById("dateline").textContent =
+    d.getFullYear() + "年" + (d.getMonth() + 1) + "月" + d.getDate() + "日 時点";
+
+  renderSubject();
+  renderItems();
+  renderTally();
+  renderSaved();
+})();
+</script>
+</body>
+</html>
