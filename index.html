@@ -6,36 +6,46 @@
 <title>高配当株チェックシート — IRバンクで見る10項目</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Zen+Kaku+Gothic+New:wght@400;500;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;500;700&display=swap" rel="stylesheet">
 <style>
   :root {
     color-scheme: light;
-    --font-sans: "Zen Kaku Gothic New", system-ui, -apple-system, "Hiragino Sans", "Yu Gothic", sans-serif;
-    --font-mono: "IBM Plex Mono", "SF Mono", Consolas, monospace;
-    --page: #fbfaf7;
-    --surface-2: #f2f0ea;
-    --text: #17233c;
-    --text-2: #4a5568;
-    --muted: #8a8f99;
-    --grid: #dad6cc;
-    --line: #b9b5ab;
-    --indigo: #17233c;
-    --indigo-ink: #fbfaf7;
-    --vermillion: #b3282d;
+    --font-sans: "Noto Sans JP", system-ui, -apple-system, "Hiragino Sans", sans-serif;
+    --page: #f6f7fb;
+    --card: #ffffff;
+    --text: #23282e;
+    --text-2: #5a6470;
+    --muted: #97a0ad;
+    --line: #e5e8ef;
+    --field: #f3f5f9;
+    --accent: #e8543f;
+    --accent-ink: #ffffff;
+    --accent-soft: #fdeeeb;
+    --good: #16a34a;   --good-soft: #e9f7ef;
+    --ok: #2563eb;     --ok-soft: #eaf1fe;
+    --mid: #d97706;    --mid-soft: #fdf2e3;
+    --bad: #dc2626;    --bad-soft: #fdecec;
+    --radius: 14px;
+    --radius-lg: 22px;
+    --shadow: 0 6px 18px rgba(35,48,74,.06);
   }
   @media (prefers-color-scheme: dark) {
     :root {
       color-scheme: dark;
-      --page: #1a1c17;
-      --surface-2: #2d2f27;
-      --text: #f0ece0;
-      --text-2: #b9b2a0;
-      --muted: #8c8676;
-      --grid: #3a3b32;
-      --line: #4a4b40;
-      --indigo: #6a8cb8;
-      --indigo-ink: #16211d;
-      --vermillion: #d47058;
+      --page: #14161a;
+      --card: #1d2026;
+      --text: #eceef2;
+      --text-2: #a9b2bf;
+      --muted: #7c8695;
+      --line: #2c3037;
+      --field: #262a31;
+      --accent: #f2674f;
+      --accent-soft: #3a241f;
+      --good: #4ade80;  --good-soft: #1c2c22;
+      --ok: #7aa7f7;    --ok-soft: #1d2531;
+      --mid: #f0b357;   --mid-soft: #302619;
+      --bad: #f87171;   --bad-soft: #331e1e;
+      --shadow: 0 6px 18px rgba(0,0,0,.28);
     }
   }
   * { box-sizing: border-box; }
@@ -43,114 +53,139 @@
     margin: 0; padding: 0;
     background: var(--page); color: var(--text);
     font-family: var(--font-sans);
+    font-size: 16px;
+    -webkit-text-size-adjust: 100%;
   }
-  .app { max-width: 1000px; margin: 0 auto; padding: 0 20px 80px; }
+  .num, .tabular { font-variant-numeric: tabular-nums; }
+  .app { max-width: 720px; margin: 0 auto; padding: 16px 16px 72px; }
 
+  /* ヒーロー */
   header.top {
-    margin: 0 0 36px; padding: 26px 0 18px;
-    border-top: 4px double var(--text); border-bottom: 4px double var(--text);
-    display: flex; justify-content: space-between; align-items: flex-end; gap: 24px; flex-wrap: wrap;
+    background: var(--card); border-radius: var(--radius-lg); box-shadow: var(--shadow);
+    padding: 22px 20px; margin-bottom: 16px;
   }
-  header.top h1 { font-weight: 700; font-size: 21px; letter-spacing: .14em; margin: 0; }
-  header.top p { margin: 10px 0 0; max-width: 56ch; color: var(--text-2); font-size: 13px; line-height: 1.8; }
-  header.top .dateline { font-family: var(--font-mono); font-size: 11.5px; color: var(--text-2); white-space: nowrap; padding-bottom: 4px; }
+  header.top h1 { font-size: 20px; font-weight: 700; margin: 0; letter-spacing: .01em; }
+  header.top p { margin: 10px 0 0; color: var(--text-2); font-size: 13px; line-height: 1.85; }
+  header.top .dateline {
+    display: inline-block; margin-top: 14px; font-size: 11.5px; color: var(--text-2);
+    background: var(--field); border-radius: 999px; padding: 4px 12px; font-variant-numeric: tabular-nums;
+  }
 
-  .panel { margin: 0 0 44px; }
+  /* カード */
+  .panel {
+    background: var(--card); border-radius: var(--radius); box-shadow: var(--shadow);
+    padding: 18px 18px 20px; margin-bottom: 16px;
+  }
   .panel h2 {
-    font-size: 13px; margin: 0 0 20px; font-weight: 700; letter-spacing: .14em;
-    padding-bottom: 9px; border-bottom: 2px solid var(--text);
+    font-size: 15px; font-weight: 700; margin: 0 0 4px;
+    display: flex; align-items: center; gap: 8px;
   }
-  .panel h2 .chap { display: inline-block; min-width: 2.4em; color: var(--text-2); }
-  .panel h2 .hint { font-weight: 400; letter-spacing: 0; font-size: 12px; color: var(--muted); float: right; }
+  .panel h2::before {
+    content: ""; width: 8px; height: 8px; border-radius: 50%;
+    background: var(--accent); flex-shrink: 0;
+  }
+  .panel h2 .chap { display: none; }
+  .panel h2 .hint { margin-left: auto; font-weight: 400; font-size: 11.5px; color: var(--muted); }
 
-  /* 銘柄の見出し */
-  .subject { display: flex; gap: 22px; flex-wrap: wrap; align-items: flex-end; margin-bottom: 8px; }
-  .subject label { display: flex; flex-direction: column; gap: 6px; font-size: 12px; color: var(--text-2); }
+  /* 対象銘柄 */
+  .subject { display: flex; gap: 12px; flex-wrap: wrap; margin-top: 14px; }
+  .subject label { display: flex; flex-direction: column; gap: 6px; font-size: 12px; color: var(--text-2); flex: 1 1 140px; }
   .subject input {
-    font-size: 15px; padding: 6px 2px; border: none; border-bottom: 1px solid var(--line);
-    background: none; color: var(--text); border-radius: 0; min-width: 8em;
+    font-size: 15px; padding: 10px 12px; border: 1px solid transparent; border-radius: 10px;
+    background: var(--field); color: var(--text); width: 100%;
   }
-  .subject input#subjCode { font-family: var(--font-mono); max-width: 7em; }
-  input:focus, select:focus, textarea:focus, button:focus-visible {
-    outline: 2px solid var(--indigo); outline-offset: 2px;
-  }
+  .subject input#subjCode { font-variant-numeric: tabular-nums; }
+  input:focus, select:focus, textarea:focus { outline: none; border-color: var(--accent); background: var(--card); }
+  button:focus-visible, input:focus-visible, select:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 
-  /* 判定カード */
-  .items { border-top: 1px solid var(--text); }
-  .item {
-    display: grid; grid-template-columns: 2.2em 1fr 12em 5em;
-    gap: 0 16px; align-items: start;
-    padding: 16px 0; border-bottom: 1px solid var(--grid);
+  /* 項目リスト */
+  .items { margin-top: 12px; }
+  .item { padding: 14px 0; border-top: 1px solid var(--line); }
+  .item:first-child { border-top: none; }
+  .item-no { display: none; }
+  .item-head { display: flex; align-items: center; gap: 8px; }
+  .item-name { font-weight: 700; font-size: 14.5px; }
+  .item-name .star {
+    margin-left: 6px; font-size: 10.5px; font-weight: 700; color: var(--accent);
+    background: var(--accent-soft); border-radius: 999px; padding: 2px 8px; vertical-align: 2px;
   }
-  .item-no { font-family: var(--font-mono); font-size: 13px; color: var(--muted); padding-top: 2px; }
-  .item-name { font-weight: 700; font-size: 14px; }
-  .item-name .star { color: var(--vermillion); margin-left: 5px; font-size: 11px; letter-spacing: .08em; }
-  .item-rule { font-size: 12px; color: var(--text-2); line-height: 1.8; margin-top: 5px; }
-  .item-input { padding-top: 1px; }
+  .item-rule { font-size: 12px; color: var(--text-2); line-height: 1.8; margin-top: 6px; }
+  .item-controls { display: flex; align-items: center; gap: 12px; margin-top: 10px; }
+  .item-input { flex: 1; display: flex; align-items: center; gap: 8px; }
   .item-input input, .item-input select {
-    width: 100%; font-size: 14px; padding: 6px 2px; border: none;
-    border-bottom: 1px solid var(--line); background: none; color: var(--text); border-radius: 0;
+    flex: 1; min-width: 0; font-size: 15px; padding: 10px 12px;
+    border: 1px solid transparent; border-radius: 10px; background: var(--field); color: var(--text);
   }
-  .item-input input { font-family: var(--font-mono); }
-  .item-input .unit { font-size: 11px; color: var(--muted); margin-left: 6px; }
+  .item-input input { font-variant-numeric: tabular-nums; }
+  .item-input .unit { font-size: 12px; color: var(--muted); flex-shrink: 0; }
+
   .verdict {
-    font-family: var(--font-mono); font-size: 21px; font-weight: 600;
-    text-align: right; padding-top: 1px;
+    flex-shrink: 0; min-width: 4.4em; text-align: center;
+    border-radius: 999px; padding: 7px 12px; font-size: 15px; font-weight: 700; line-height: 1.2;
   }
-  .verdict small { display: block; font-family: var(--font-sans); font-size: 10.5px; font-weight: 400; letter-spacing: .04em; margin-top: 3px; }
-  .v-good { color: var(--text); }
-  .v-ok { color: var(--text-2); }
-  .v-mid { color: var(--muted); }
-  .v-bad { color: var(--vermillion); }
-  .v-none { color: var(--muted); }
+  .verdict small { display: block; font-size: 10px; font-weight: 500; margin-top: 2px; }
+  .v-good { color: var(--good); background: var(--good-soft); }
+  .v-ok   { color: var(--ok);   background: var(--ok-soft); }
+  .v-mid  { color: var(--mid);  background: var(--mid-soft); }
+  .v-bad  { color: var(--bad);  background: var(--bad-soft); }
+  .v-none { color: var(--muted); background: var(--field); }
 
   /* 総合 */
-  .tally { display: flex; flex-wrap: wrap; gap: 8px 0; padding: 22px 0; border-bottom: 1px solid var(--grid); margin-bottom: 20px; }
-  .tally .stat { padding: 0 28px; border-right: 1px solid var(--grid); }
-  .tally .stat:first-child { padding-left: 0; }
-  .tally .stat:last-child { border-right: none; }
-  .tally .label { font-size: 10.5px; letter-spacing: .08em; color: var(--muted); margin-bottom: 7px; }
-  .tally .value { font-family: var(--font-mono); font-size: 26px; font-weight: 600; }
-  .tally .value.is-bad { color: var(--vermillion); }
-  .tally .unit { font-family: var(--font-sans); font-size: 11px; font-weight: 400; color: var(--text-2); margin-left: 3px; }
+  .tally { display: grid; grid-template-columns: repeat(auto-fit, minmax(92px, 1fr)); gap: 10px; margin: 14px 0 16px; }
+  .tally .stat { background: var(--field); border-radius: 12px; padding: 12px 14px; }
+  .tally .label { font-size: 11px; color: var(--text-2); margin-bottom: 6px; }
+  .tally .value { font-size: 22px; font-weight: 700; font-variant-numeric: tabular-nums; }
+  .tally .value.is-bad { color: var(--bad); }
+  .tally .unit { font-size: 11px; font-weight: 400; color: var(--text-2); margin-left: 3px; }
 
-  .readout { font-size: 13.5px; line-height: 1.9; margin: 0 0 6px; }
-  .readout strong { font-weight: 700; }
-  .readout.is-bad strong { color: var(--vermillion); }
-  .caveats { margin: 18px 0 0; padding: 0 0 0 1.1em; font-size: 12.5px; color: var(--text-2); line-height: 1.9; }
-
-  button.btn {
-    font-size: 13px; padding: 9px 4px; border-radius: 0; letter-spacing: .04em;
-    border: none; border-bottom: 1px solid var(--text); background: none; color: var(--text); cursor: pointer;
+  .readout {
+    font-size: 13.5px; line-height: 1.9; margin: 0; padding: 14px 16px;
+    background: var(--field); border-radius: 12px;
   }
-  button.btn:hover { color: var(--indigo); border-bottom-color: var(--indigo); }
-  button.btn.primary { background: var(--indigo); color: var(--indigo-ink); padding: 10px 20px; border-bottom-color: var(--indigo); }
-  button.btn.primary:hover { opacity: .88; }
-  .toolbar { display: flex; gap: 22px; flex-wrap: wrap; align-items: center; margin-top: 18px; }
+  .readout.is-bad { background: var(--bad-soft); }
+  .readout.is-bad strong { color: var(--bad); }
+  .caveats { margin: 16px 0 0; padding-left: 1.2em; font-size: 12.5px; color: var(--text-2); line-height: 1.95; }
+
+  /* ボタン */
+  .toolbar { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; margin-top: 18px; }
+  button.btn {
+    font-family: inherit; font-size: 13.5px; font-weight: 700; padding: 11px 18px;
+    border-radius: 999px; border: 1px solid var(--line); background: var(--card);
+    color: var(--text); cursor: pointer;
+  }
+  button.btn:hover { background: var(--field); }
+  button.btn.primary { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); }
+  button.btn.primary:hover { opacity: .9; background: var(--accent); }
   .toolbar-status { font-size: 12px; color: var(--text-2); }
 
+  /* 保存一覧 */
   table.saved { width: 100%; border-collapse: collapse; font-size: 13px; }
-  table.saved thead th { border-bottom: 2px solid var(--text); }
-  table.saved th, table.saved td { padding: 9px 7px; border-bottom: 1px solid var(--grid); text-align: left; white-space: nowrap; }
-  table.saved th { color: var(--text-2); font-weight: 600; font-size: 10.5px; letter-spacing: .08em; }
-  table.saved td.num { font-family: var(--font-mono); }
-  table.saved td.bad { color: var(--vermillion); }
-  .saved-wrap { overflow-x: auto; }
-  .row-actions button { background: none; border: none; border-bottom: 1px solid var(--line); color: var(--text-2); cursor: pointer; font-size: 12px; padding: 2px 0; margin-right: 14px; }
-  .row-actions button:hover { color: var(--vermillion); border-bottom-color: var(--vermillion); }
+  table.saved th, table.saved td { padding: 11px 8px; border-bottom: 1px solid var(--line); text-align: left; white-space: nowrap; }
+  table.saved thead th { font-size: 11px; color: var(--text-2); font-weight: 500; border-bottom: 1px solid var(--line); }
+  table.saved td.num { font-variant-numeric: tabular-nums; }
+  table.saved td.bad { color: var(--bad); font-weight: 700; }
+  table.saved tbody tr:last-child td { border-bottom: none; }
+  .saved-wrap { overflow-x: auto; margin-top: 12px; }
+  .row-actions button {
+    font-family: inherit; background: var(--field); border: none; border-radius: 999px;
+    color: var(--text-2); cursor: pointer; font-size: 12px; padding: 6px 12px; margin-right: 8px;
+  }
+  .row-actions button:hover { color: var(--accent); background: var(--accent-soft); }
   .empty-note { color: var(--muted); font-size: 13px; padding: 18px 0; }
 
-  footer.foot { color: var(--text-2); font-size: 12px; margin-top: 44px; padding-top: 18px; border-top: 4px double var(--text); line-height: 1.9; }
-  footer.foot .note-label { font-weight: 700; letter-spacing: .1em; margin-right: 8px; }
-  footer.foot a { color: var(--text-2); }
+  footer.foot {
+    color: var(--text-2); font-size: 12px; margin-top: 20px; line-height: 1.95;
+    background: var(--card); border-radius: var(--radius); box-shadow: var(--shadow); padding: 16px 18px;
+  }
+  footer.foot .note-label {
+    font-weight: 700; font-size: 11px; color: var(--accent);
+    background: var(--accent-soft); border-radius: 999px; padding: 3px 10px; margin-right: 8px;
+  }
 
-  @media (max-width: 720px) {
-    .panel h2 .hint { float: none; display: block; margin-top: 6px; }
-    .item { grid-template-columns: 1.8em 1fr; gap: 4px 12px; }
-    .item-input { grid-column: 2; padding-top: 8px; }
-    .verdict { grid-column: 2; text-align: left; font-size: 19px; padding-top: 8px; }
-    .verdict small { display: inline; margin-left: 8px; }
-    .tally .stat { padding: 0 18px 12px; border-right: none; }
+  @media (max-width: 560px) {
+    .app { padding: 12px 12px 64px; }
+    .item-input input, .item-input select { font-size: 16px; padding: 10px; }
+    .verdict { min-width: 3.6em; padding: 9px 10px; }
   }
 </style>
 </head>
@@ -387,16 +422,19 @@
       row.className = "item";
       row.dataset.key = item.key;
 
-      var no = document.createElement("div");
-      no.className = "item-no";
-      no.textContent = (idx + 1);
-      row.appendChild(no);
+      var head = document.createElement("div");
+      head.className = "item-head";
+      head.innerHTML = '<div class="item-name">' + (idx + 1) + ". " + item.name +
+        (item.star ? '<span class="star">重視</span>' : '') + '</div>';
+      row.appendChild(head);
 
-      var body = document.createElement("div");
-      body.innerHTML = '<div class="item-name">' + item.name +
-        (item.star ? '<span class="star">★重視</span>' : '') + '</div>' +
-        '<div class="item-rule">' + item.rule + '</div>';
-      row.appendChild(body);
+      var rule = document.createElement("div");
+      rule.className = "item-rule";
+      rule.textContent = item.rule;
+      row.appendChild(rule);
+
+      var controls = document.createElement("div");
+      controls.className = "item-controls";
 
       var inputCell = document.createElement("div");
       inputCell.className = "item-input";
@@ -429,12 +467,13 @@
         unit.textContent = item.field.unit;
         inputCell.appendChild(unit);
       }
-      row.appendChild(inputCell);
+      controls.appendChild(inputCell);
 
       var verdict = document.createElement("div");
       verdict.className = "verdict";
-      row.appendChild(verdict);
+      controls.appendChild(verdict);
 
+      row.appendChild(controls);
       root.appendChild(row);
     });
     renderVerdicts();
