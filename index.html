@@ -119,6 +119,23 @@
     background: var(--accent-soft); border-radius: 999px; padding: 2px 8px; vertical-align: 2px;
   }
   .item-rule { font-size: 12px; color: var(--text-2); line-height: 1.8; margin-top: 6px; }
+  /* 自動採点の根拠: 5期の推移の小さな折れ線と、判定の理由 */
+  .item-evidence { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-top: 8px; font-size: 12px; color: var(--text-2); }
+  .item-evidence:empty { display: none; }
+  .item-evidence svg { flex-shrink: 0; }
+  .item-evidence .ev-text { flex: 1 1 12em; line-height: 1.7; }
+  .chip { font-size: 10.5px; font-weight: 700; border-radius: 999px; padding: 2px 8px; white-space: nowrap; }
+  .chip.is-auto { background: var(--accent-soft); color: var(--accent); }
+  .chip.is-manual { background: var(--field); color: var(--text-2); }
+  .chip.is-edge { background: #fff4df; color: #9a5b00; }
+  .auto-status { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-top: 12px; font-size: 12.5px; color: var(--text-2); }
+  .btn-link { font-family: inherit; font-size: 12px; background: none; border: none; padding: 0; color: var(--accent); cursor: pointer; text-decoration: underline; }
+  .source-note { margin: 0 0 12px; line-height: 1.85; }
+  .source-note a { color: inherit; }
+  .composite { margin-top: 10px; font-size: 13px; line-height: 1.8; }
+  .composite p { margin: 4px 0; }
+  .composite .is-good { color: var(--good, #16a34a); font-weight: 700; }
+  .composite .is-warn { color: #b45309; font-weight: 700; }
   .item-controls { display: flex; align-items: center; gap: 12px; margin-top: 10px; }
   .item-input { flex: 1; display: flex; align-items: center; gap: 8px; }
   .item-input input, .item-input select {
@@ -229,6 +246,11 @@
     <div class="subject">
       <label>証券コード<input type="text" id="subjCode" inputmode="numeric" placeholder="8306"></label>
       <label>銘柄名<input type="text" id="subjName" placeholder="三菱UFJ"></label>
+      <label>株価(任意)<input type="number" id="subjPrice" inputmode="decimal" step="any" min="0" placeholder="PBRの計算に使います"></label>
+    </div>
+    <div class="auto-status" id="autoStatus" hidden>
+      <span id="autoStatusText"></span>
+      <button type="button" class="btn-link" id="rescoreBtn">有報の値で採点し直す</button>
     </div>
   </section>
 
@@ -271,6 +293,14 @@
     <span class="arw">›</span>
   </a>
   <footer class="foot">
+    <p class="source-note">
+      <span class="note-label">出典</span>証券コードを入れたときの自動採点は、
+      <a href="https://disclosure2.edinet-fsa.go.jp/" target="_blank" rel="noopener noreferrer">EDINET閲覧(提出)サイト</a>
+      の有価証券報告書「主要な経営指標等の推移」をもとに当サイトが加工して作成しています
+      (<a href="https://www.digital.go.jp/resources/open_data/public_data_license_v1.0" target="_blank" rel="noopener noreferrer">公共データ利用規約 第1.0版</a>)。
+      1株配当は株式分割を発行済株式数から判定して割り戻しており、金融庁が作成したままの数値ではありません。
+      有価証券報告書に載るのは5期分のため、ノートで10年を見る項目も5期で判定しています。
+    </p>
     <span class="note-label">注記</span>判定の基準は筆者が高配当株を見るときに使っている目安で、絶対的な正解ではありません。数値はIRバンクなどでご自身で確認したものを入力してください。投資判断は自己責任で行ってください。
   </footer>
 </div>
@@ -405,17 +435,157 @@
 
   var STAR_KEYS = ITEMS.filter(function (i) { return i.star; }).map(function (i) { return i.key; });
 
+  // ---------- 有価証券報告書からの自動採点 ----------
+  // 「右肩上がり」のような言葉の基準を、次の決まりに置き換えている。
+  //   横ばい: 5期前比が±10%以内 / 右肩上がり: 10%超の増加で、前年割れが1回以下かつ下げ幅10%未満
+  //   増減が激しい: 前年比が±15%を超えた年が2回以上、うち1回以上は大きな減少 / 減少傾向: 5期前比で10%超の減少
+  // 決まりの境目(±2ポイント以内)にあるものは「境目」と出し、断定しない。
+  var FLAT = 0.10, DROP = 0.10, SWING = 0.15, EDGE = 0.02;
+  var FINANCIAL_SECTORS = ["銀行業", "保険業", "証券、商品先物取引業", "その他金融業"];
+
+  function signedPct(x, d) { return (x >= 0 ? "+" : "−") + Math.abs(x * 100).toFixed(d == null ? 0 : d) + "%"; }
+
+  function trendOf(series, allowUnstable) {
+    if (!series || series.length < 3) return null;
+    if (series.some(function (v) { return v <= 0; })) {
+      return { value: allowUnstable ? null : "down", reason: series.length + "期のうち赤字(マイナス)の期がある", edge: false };
+    }
+    var yoy = [];
+    for (var i = 1; i < series.length; i++) yoy.push(series[i] / series[i - 1] - 1);
+    var change = series[series.length - 1] / series[0] - 1;
+    var downs = yoy.filter(function (y) { return y < 0; }).length;
+    var maxDrop = Math.min.apply(null, yoy);
+    // 「増減が激しい」は増えたり減ったりすること。毎年大きく伸びているだけの会社は含めない
+    var swings = yoy.filter(function (y) { return Math.abs(y) > SWING; }).length;
+    var bigDrops = yoy.filter(function (y) { return y < -SWING; }).length;
+    var volatile = swings >= 2 && bigDrops >= 1;
+    var edge = Math.abs(Math.abs(change) - FLAT) <= EDGE
+      || (downs > 0 && Math.abs(maxDrop + DROP) <= EDGE)
+      || yoy.some(function (y) { return Math.abs(Math.abs(y) - SWING) <= EDGE; });
+
+    var value = null;
+    if (allowUnstable && volatile) value = "unstable";
+    else if (Math.abs(change) <= FLAT) value = "flat";
+    else if (change > FLAT && downs <= 1 && maxDrop > -DROP) value = "up";
+    else if (change < -FLAT) value = "down";
+    // EPSは「増減が激しい」の選択肢が無く「下降・不安定」に含める
+    if (!allowUnstable && volatile) value = "down";
+
+    var reason = series.length + "期前比 " + signedPct(change) + "、前年割れ" + downs + "回"
+      + (downs > 0 ? "(最大" + signedPct(maxDrop) + ")" : "")
+      + (swings > 0 ? "、±15%超の変動" + swings + "回" : "");
+    if (value === null) reason += "。決まりのどれにも当てはまらないので要確認";
+    return { value: value, reason: reason, edge: edge };
+  }
+
+  function cfOf(series) {
+    if (!series || series.length < 2) return null;
+    var neg = series.filter(function (v) { return v <= 0; }).length;
+    if (neg > 0) return { value: "negative", reason: series.length + "期のうち" + neg + "期が赤字" };
+    var change = series[series.length - 1] / series[0] - 1;
+    if (change > 0) return { value: "growing", reason: series.length + "期とも黒字、" + series.length + "期前比 " + signedPct(change) };
+    return { value: "positive", reason: series.length + "期とも黒字、" + series.length + "期前比 " + signedPct(change) };
+  }
+
+  function cashOf(series) {
+    if (!series || series.length < 2 || series[0] <= 0) return null;
+    var change = series[series.length - 1] / series[0] - 1;
+    var value = change > FLAT ? "up" : change < -FLAT ? "down" : "flat";
+    return { value: value, reason: series.length + "期前比 " + signedPct(change), edge: Math.abs(Math.abs(change) - FLAT) <= EDGE };
+  }
+
+  function dividendOf(series) {
+    if (!series || series.length < 2) return null;
+    var cut = 0, flat = 0;
+    for (var i = 1; i < series.length; i++) {
+      if (series[i] <= 0 || series[i] < series[i - 1]) cut++;
+      else if (series[i] === series[i - 1]) flat++;
+    }
+    var value = cut > 0 ? "cut" : flat === 0 ? "growing" : "stable";
+    var reason = series.map(function (v) { return String(Math.round(v * 100) / 100); }).join("→") + "円"
+      + (value === "growing" ? "(" + (series.length - 1) + "期連続増配)" : cut > 0 ? "(減配" + cut + "回)" : "(減配なし)");
+    return { value: value, reason: reason };
+  }
+
+  function lastOf(a) { return a && a.length ? a[a.length - 1] : null; }
+
+  // 取り込んだ1社分の数字から、項目ごとの初期値と根拠を作る
+  function scoreRecord(rec) {
+    var fin = FINANCIAL_SECTORS.indexOf(rec.sec) !== -1;
+    var skip = { value: null, reason: "銀行・保険などは業態が違い、この基準が当てはまらないため自動で判定していません" };
+    var ev = {};
+    ev.sales = rec.sales ? Object.assign(trendOf(rec.sales, true) || {}, { series: rec.sales }) : null;
+    ev.eps = rec.eps ? Object.assign(trendOf(rec.eps, false) || {}, { series: rec.eps }) : null;
+    ev.opm = fin ? skip : rec.opm != null
+      ? { value: (rec.opm * 100).toFixed(1), reason: "当期の営業利益 ÷ 売上高" }
+      : { value: null, reason: "営業利益を開示していない会社です(IFRSの商社など)" };
+    ev.equity = fin ? skip : rec.eq ? { value: (lastOf(rec.eq) * 100).toFixed(1), reason: "当期末", series: rec.eq } : null;
+    ev.cf = fin ? skip : rec.ocf ? Object.assign(cfOf(rec.ocf) || {}, { series: rec.ocf }) : null;
+    ev.cash = rec.cash ? Object.assign(cashOf(rec.cash) || {}, { series: rec.cash }) : null;
+    ev.dividend = rec.div ? Object.assign(dividendOf(rec.div) || {}, { series: rec.div }) : null;
+    // 有報の配当性向は個別(親会社単体)の表にしか載らないことが多い。一般に使う連結の
+    // 配当性向に合わせるため、1株配当 ÷ 連結EPS で出す。EPSが無ければ有報の値を使う
+    var dLast = lastOf(rec.div), eLast = lastOf(rec.eps);
+    ev.payout = dLast != null && eLast > 0
+      ? { value: (dLast / eLast * 100).toFixed(1), reason: "当期の1株配当 " + dLast + "円 ÷ EPS " + eLast + "円(連結)" }
+      : rec.payout != null ? { value: (rec.payout * 100).toFixed(1), reason: "当期(個別の配当性向)" } : null;
+    if (eLast != null && eLast <= 0 && dLast > 0) ev.payout = { value: null, reason: "当期のEPSが赤字のため配当性向を出せません(利益以上に配当しています)" };
+
+    // 数字の項目も、基準値のすぐ近くは「境目」とする
+    var EDGES = { opm: [10, 5], equity: [60, 40, 10], payout: [30, 50, 70], roe: [8, 5], pbr: [0.5, 1, 1.5] };
+    Object.keys(EDGES).forEach(function (k) {
+      var e = ev[k];
+      if (!e || e.value == null) return;
+      var v = parseFloat(e.value), tol = k === "pbr" ? 0.05 : 1;
+      if (EDGES[k].some(function (t) { return Math.abs(v - t) <= tol; })) e.edge = true;
+    });
+    ev.roe = rec.roe ? { value: (lastOf(rec.roe) * 100).toFixed(1), reason: "当期", series: rec.roe } : null;
+    ev.pbr = rec.bps ? { value: null, reason: "1株純資産 " + rec.bps.toLocaleString("ja-JP") + "円。株価を入れるとPBRが出ます", bps: rec.bps } : null;
+    Object.keys(ev).forEach(function (k) { if (ev[k] && ev[k].value === undefined) ev[k].value = null; });
+    return ev;
+  }
+
+  // ノートの最後の2行。「配当性向安定し増配を続けている会社は投資候補」
+  // 「配当性向が高まっていたりEPSの成長が鈍化している場合で減配しないのは注意」
+  function compositeOf(rec, ev) {
+    var out = [];
+    if (!rec || !rec.div || !rec.eps) return out;
+    var n = Math.min(rec.div.length, rec.eps.length);
+    var d = rec.div.slice(-n), e = rec.eps.slice(-n);
+    var payouts = [];
+    for (var i = 0; i < n; i++) if (e[i] > 0) payouts.push(d[i] / e[i]);
+    if (payouts.length < 3) return out;
+    var pMax = Math.max.apply(null, payouts), pMin = Math.min.apply(null, payouts);
+    var rising = payouts[payouts.length - 1] - payouts[0];
+    var divEv = ev.dividend && ev.dividend.value, epsEv = ev.eps && ev.eps.value;
+    var range = "1株配当÷EPSで見た配当性向 " + payouts.map(function (x) { return Math.round(x * 100) + "%"; }).join("→");
+    if (divEv === "growing" && pMax - pMin <= 0.15) {
+      out.push({ kind: "good", text: "投資候補: 配当性向が安定したまま増配を続けています。" + range });
+    }
+    // 「EPSの成長が鈍化」は、変動の大きさではなく実際に伸びていないこと(5期前比+10%以下か赤字)で見る
+    var epsStalled = e[0] > 0 ? (e[e.length - 1] / e[0] - 1 <= FLAT) : true;
+    if (e.some(function (x) { return x <= 0; })) epsStalled = true;
+    if (divEv && divEv !== "cut" && (rising >= 0.15 || epsStalled)) {
+      out.push({ kind: "warn", text: "注意: " + (rising >= 0.15 ? "配当性向が上がってきている" : "EPSが伸びていない")
+        + "のに減配していません。利益の裏付けが薄い配当かもしれません。" + range });
+    }
+    return out;
+  }
+
+
   function loadState() {
     var raw = null;
     try { raw = localStorage.getItem(STORAGE_KEY); } catch (e) {}
-    var defaults = { subject: { code: "", name: "" }, values: {}, saved: [] };
+    var defaults = { subject: { code: "", name: "" }, values: {}, saved: [], auto: null };
     if (!raw) return defaults;
     try {
       var parsed = JSON.parse(raw);
       return {
         subject: Object.assign({}, defaults.subject, parsed.subject),
         values: parsed.values || {},
-        saved: Array.isArray(parsed.saved) ? parsed.saved : []
+        saved: Array.isArray(parsed.saved) ? parsed.saved : [],
+        // auto = { code, fy, rec, ev, values }: 最後に有報から採点した銘柄と、そのときの初期値
+        auto: parsed.auto || null
       };
     } catch (e) { return defaults; }
   }
@@ -463,6 +633,10 @@
       rule.textContent = item.rule;
       row.appendChild(rule);
 
+      var evidence = document.createElement("div");
+      evidence.className = "item-evidence";
+      row.appendChild(evidence);
+
       var controls = document.createElement("div");
       controls.className = "item-controls";
 
@@ -507,12 +681,58 @@
       root.appendChild(row);
     });
     renderVerdicts();
+    renderEvidence();
+  }
+
+  // 5期の推移を小さな折れ線にする。0をまたぐときは0の線も引く
+  function sparkline(series) {
+    var w = 84, h = 26, pad = 3;
+    var min = Math.min.apply(null, series.concat([0 < Math.min.apply(null, series) ? Math.min.apply(null, series) : 0]));
+    var max = Math.max.apply(null, series);
+    if (max === min) max = min + 1;
+    function y(v) { return h - pad - (v - min) / (max - min) * (h - pad * 2); }
+    var step = series.length > 1 ? (w - pad * 2) / (series.length - 1) : 0;
+    var pts = series.map(function (v, i) { return (pad + i * step).toFixed(1) + "," + y(v).toFixed(1); }).join(" ");
+    var zero = min < 0 && max > 0
+      ? '<line x1="0" x2="' + w + '" y1="' + y(0).toFixed(1) + '" y2="' + y(0).toFixed(1) + '" stroke="currentColor" stroke-opacity=".3" stroke-dasharray="2 2"/>' : "";
+    var last = series.length - 1;
+    return '<svg width="' + w + '" height="' + h + '" viewBox="0 0 ' + w + ' ' + h + '" aria-hidden="true">' + zero
+      + '<polyline points="' + pts + '" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/>'
+      + '<circle cx="' + (pad + last * step).toFixed(1) + '" cy="' + y(series[last]).toFixed(1) + '" r="2.2" fill="currentColor"/></svg>';
+  }
+
+  function renderEvidence() {
+    var a = state.auto;
+    ITEMS.forEach(function (item) {
+      var cell = document.querySelector('.item[data-key="' + item.key + '"] .item-evidence');
+      if (!cell) return;
+      cell.innerHTML = "";
+      if (!a || !a.ev || a.code !== (state.subject.code || "").trim().toUpperCase()) return;
+      var e = a.ev[item.key];
+      if (!e) {
+        cell.innerHTML = '<span class="ev-text">有価証券報告書から取れませんでした。手で入れてください。</span>';
+        return;
+      }
+      var html = e.series ? sparkline(e.series) : "";
+      html += '<span class="ev-text">' + escapeHtml(e.reason || "") + '</span>';
+      var cur = state.values[item.key];
+      var autoVal = a.values ? a.values[item.key] : undefined;
+      if (autoVal !== undefined && autoVal !== null && String(cur) === String(autoVal)) html += '<span class="chip is-auto">有報から自動</span>';
+      else if (autoVal !== undefined && autoVal !== null && cur !== undefined) html += '<span class="chip is-manual">手で変更</span>';
+      if (e.edge) html += '<span class="chip is-edge">境目</span>';
+      cell.innerHTML = html;
+    });
+  }
+
+  function escapeHtml(t) {
+    return String(t).replace(/[&<>"']/g, function (c) { return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]; });
   }
 
   function onChange(key, value) {
     if (value === "") delete state.values[key]; else state.values[key] = value;
     save();
     renderVerdicts();
+    renderEvidence();
     renderTally();
   }
 
@@ -556,6 +776,7 @@
       '<div class="stat"><div class="label">重要4項目(★)</div><div class="value">' + s.starPassing + '<span class="unit">/ ' + s.starTotal + ' が◎○</span></div></div>' +
       '<div class="stat"><div class="label">入力済み</div><div class="value">' + s.answered + '<span class="unit">/ ' + s.results.length + '</span></div></div>';
 
+    renderComposite();
     var readout = document.getElementById("readout");
     readout.className = "readout";
     if (s.answered === 0) {
@@ -574,6 +795,29 @@
     } else {
       readout.innerHTML = "<strong>❌はありません。</strong>△が" + s.counts.mid + "項目あるので、その項目が許容できるかを確認してください。";
     }
+  }
+
+  function renderComposite() {
+    var readout = document.getElementById("readout");
+    var box = document.getElementById("composite");
+    if (!box) {
+      box = document.createElement("div");
+      box.id = "composite";
+      box.className = "composite";
+      readout.parentNode.insertBefore(box, readout.nextSibling);
+    }
+    box.innerHTML = "";
+    var a = state.auto;
+    if (!a || !a.rec || a.code !== (state.subject.code || "").trim().toUpperCase()) return;
+    compositeOf(a.rec, a.ev).forEach(function (c) {
+      var p = document.createElement("p");
+      var head = document.createElement("span");
+      head.className = c.kind === "good" ? "is-good" : "is-warn";
+      head.textContent = c.text.split(":")[0] + ":";
+      p.appendChild(head);
+      p.appendChild(document.createTextNode(c.text.slice(c.text.indexOf(":") + 1)));
+      box.appendChild(p);
+    });
   }
 
   // ---------- 保存 ----------
@@ -613,7 +857,9 @@
       loadBtn.addEventListener("click", function () {
         state.subject = { code: entry.code, name: entry.name };
         state.values = Object.assign({}, entry.values);
+        state.auto = null;
         save(); renderSubject(); renderItems(); renderTally();
+        if (/^[0-9][0-9A-Z]{3}$/.test((entry.code || "").trim())) applyAuto(entry.code.trim(), false);
         setStatus("「" + (entry.name || entry.code) + "」を読み込みました。");
         window.scrollTo({ top: 0, behavior: "smooth" });
       });
@@ -663,17 +909,25 @@
     var lines = [];
     lines.push("## " + title + " 高配当株チェック(" + todayStamp() + ")");
     lines.push("");
-    lines.push("| 項目 | 入力 | 判定 |");
-    lines.push("|---|---|---|");
+    var a = state.auto && state.auto.code === (state.subject.code || "").trim().toUpperCase() ? state.auto : null;
+    lines.push("| 項目 | 入力 | 判定 | 根拠 |");
+    lines.push("|---|---|---|---|");
     s.results.forEach(function (r) {
       var name = r.item.name + (r.item.star ? " ★" : "");
-      lines.push("| " + name + " | " + (labelOf(r.item, r.value) || "—") + " | " + MARK[r.level] + (r.note ? "(" + r.note + ")" : "") + " |");
+      var e = a && a.ev[r.item.key];
+      var why = e && e.reason ? e.reason.replace(/\|/g, "/") : "";
+      if (a && a.values[r.item.key] !== undefined && String(r.value) !== String(a.values[r.item.key])) why += "(手で変更)";
+      lines.push("| " + name + " | " + (labelOf(r.item, r.value) || "—") + " | " + MARK[r.level] + (r.note ? "(" + r.note + ")" : "") + " | " + (why || "—") + " |");
     });
     lines.push("");
     lines.push("- 判定: ◎" + s.counts.good + " ○" + s.counts.ok + " △" + s.counts.mid + " ❌" + s.counts.bad);
     lines.push("- 重要4項目(★): " + s.starPassing + " / " + s.starTotal + " が◎○");
     if (s.badItems.length > 0) {
       lines.push("- 基準を外れた項目: " + s.badItems.map(function (r) { return r.item.name; }).join("、"));
+    }
+    if (a) {
+      compositeOf(a.rec, a.ev).forEach(function (c) { lines.push("- " + c.text); });
+      lines.push("- 出典: EDINET 有価証券報告書(" + (a.fy || "") + "期)をもとに加工");
     }
     return lines.join("\n");
   }
@@ -703,13 +957,112 @@
     if (!confirm("入力内容をクリアします。保存済みの評価は残ります。")) return;
     state.subject = { code: "", name: "" };
     state.values = {};
+    state.auto = null;
+    setAutoStatus("", false);
     save(); renderSubject(); renderItems(); renderTally();
     setStatus("クリアしました。");
+  });
+
+  // 数字は証券コードの頭の数字ごとのファイルにまとめてあり、必要な1つだけ読む
+  var finCache = {};
+  function loadRecord(code) {
+    var head = code.charAt(0);
+    if (!finCache[head]) {
+      finCache[head] = fetch("fin/" + head + ".json")
+        .then(function (r) { return r.ok ? r.json() : {}; })
+        .catch(function () { return {}; });
+    }
+    return finCache[head].then(function (m) { return m[code] || null; });
+  }
+
+  function pbrFrom(price, bps) {
+    var p = parseFloat(price);
+    return p > 0 && bps > 0 ? (p / bps).toFixed(2) : null;
+  }
+
+  function setAutoStatus(text, showRescore) {
+    var box = document.getElementById("autoStatus");
+    box.hidden = !text;
+    document.getElementById("autoStatusText").textContent = text || "";
+    document.getElementById("rescoreBtn").hidden = !showRescore;
+  }
+
+  // overwrite=true なら、項目の値を有報からの初期値で置き換える(新しい銘柄を入れたとき)。
+  // false なら値はそのままで、根拠の表示だけ付ける(保存済みの評価を読み込んだとき)。
+  function applyAuto(code, overwrite) {
+    return loadRecord(code).then(function (rec) {
+      if ((state.subject.code || "").trim().toUpperCase() !== code) return; // 読み込み中にコードが変わった
+      if (!rec) {
+        state.auto = null; save(); renderEvidence();
+        setAutoStatus("この銘柄の有価証券報告書のデータがありません。手で入れてください。", false);
+        return;
+      }
+      var ev = scoreRecord(rec);
+      if (ev.pbr) {
+        var pbr = pbrFrom(state.subject.price, ev.pbr.bps);
+        if (pbr) { ev.pbr.value = pbr; ev.pbr.reason = "株価 " + state.subject.price + "円 ÷ 1株純資産 " + ev.pbr.bps.toLocaleString("ja-JP") + "円"; }
+      }
+      var values = {};
+      Object.keys(ev).forEach(function (k) { if (ev[k] && ev[k].value != null) values[k] = ev[k].value; });
+      var prevName = state.auto && state.auto.rec ? state.auto.rec.n : null;
+      state.auto = { code: code, fy: rec.fy, rec: rec, ev: ev, values: values };
+      if (overwrite) {
+        state.values = Object.assign({}, values);
+        if (!state.subject.name || state.subject.name === prevName) state.subject.name = rec.n;
+      }
+      save(); renderSubject(); renderItems(); renderTally();
+      var n = Object.keys(values).length;
+      setAutoStatus((rec.fy ? rec.fy.slice(0, 7).replace("-", "年") + "月期の" : "") + "有価証券報告書から " + n + "項目を採点しました。"
+        + (values.pbr ? "" : " PBRは株価を入れると出ます。"), true);
+    });
+  }
+
+  var codeTimer = null;
+  document.getElementById("subjCode").addEventListener("input", function (e) {
+    clearTimeout(codeTimer);
+    var code = e.target.value.trim().toUpperCase();
+    if (!/^[0-9][0-9A-Z]{3}$/.test(code)) { setAutoStatus("", false); return; }
+    codeTimer = setTimeout(function () {
+      if (state.auto && state.auto.code === code) return;
+      setAutoStatus("有価証券報告書のデータを読み込んでいます…", false);
+      applyAuto(code, true);
+    }, 300);
+  });
+
+  document.getElementById("rescoreBtn").addEventListener("click", function () {
+    var code = (state.subject.code || "").trim().toUpperCase().toUpperCase();
+    if (!code) return;
+    if (!confirm("手で変えた項目も、有価証券報告書からの値に戻します。よろしいですか?")) return;
+    state.auto = null;
+    applyAuto(code, true);
+  });
+
+  document.getElementById("subjPrice").addEventListener("input", function (e) {
+    state.subject.price = e.target.value;
+    var a = state.auto;
+    if (a && a.ev && a.ev.pbr) {
+      var pbr = pbrFrom(e.target.value, a.ev.pbr.bps);
+      var wasAuto = a.values.pbr !== undefined && String(state.values.pbr) === String(a.values.pbr);
+      a.ev.pbr.value = pbr;
+      a.ev.pbr.edge = !!pbr && [0.5, 1, 1.5].some(function (t) { return Math.abs(parseFloat(pbr) - t) <= 0.05; });
+      a.ev.pbr.reason = pbr
+        ? "株価 " + e.target.value + "円 ÷ 1株純資産 " + a.ev.pbr.bps.toLocaleString("ja-JP") + "円"
+        : "1株純資産 " + a.ev.pbr.bps.toLocaleString("ja-JP") + "円。株価を入れるとPBRが出ます";
+      // 手でPBRを入れていたら上書きしない
+      if (wasAuto || state.values.pbr === undefined) {
+        if (pbr) { state.values.pbr = pbr; a.values.pbr = pbr; }
+        else { delete state.values.pbr; delete a.values.pbr; }
+      }
+      save(); renderItems(); renderTally();
+      return;
+    }
+    save();
   });
 
   function renderSubject() {
     document.getElementById("subjCode").value = state.subject.code || "";
     document.getElementById("subjName").value = state.subject.name || "";
+    document.getElementById("subjPrice").value = state.subject.price || "";
   }
 
   ["subjCode", "subjName"].forEach(function (id) {
@@ -727,6 +1080,11 @@
   renderItems();
   renderTally();
   renderSaved();
+  // 前回の採点を開き直したときも、どこから来た値かを出しておく
+  if (state.auto && state.auto.code === (state.subject.code || "").trim().toUpperCase()) {
+    var fy = state.auto.fy ? state.auto.fy.slice(0, 7).replace("-", "年") + "月期の" : "";
+    setAutoStatus(fy + "有価証券報告書から " + Object.keys(state.auto.values || {}).length + "項目を採点しました。", true);
+  }
 })();
 </script>
 </body>
