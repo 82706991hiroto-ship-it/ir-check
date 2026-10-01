@@ -414,11 +414,12 @@
     },
     {
       key: "cash", name: "現金等", star: false,
-      rule: "長期的に増えているのが良い。",
+      rule: "長期的に増えているのが良い。5期で30%以上減っていて、営業CFの5期合計も赤字 → ❌",
       field: selectItem([
         { value: "up", label: "長期的に増加", level: GOOD },
         { value: "flat", label: "横ばい", level: OK },
-        { value: "down", label: "減少傾向", level: MID }
+        { value: "down", label: "減少傾向", level: MID },
+        { value: "burn", label: "減少傾向(本業も赤字)", level: BAD, note: "稼げず食いつぶし" }
       ])
     },
     {
@@ -557,11 +558,27 @@
     return { value: series[0] > 0 && change > 0 ? "growing" : "positive", reason: head };
   }
 
-  function cashOf(series) {
+  // 現金が減った理由が本業の赤字なら❌。還元・投資・返済で減っただけ(営業CFは黒字)なら△のまま
+  var BURN = 0.30;
+  function oku(m) { return (m >= 0 ? "+" : "−") + Math.abs(Math.round(m / 100)).toLocaleString("ja-JP") + "億円"; }
+  function cashOf(series, ocf, noCf) {
     if (!series || series.length < 2 || series[0] <= 0) return null;
     var change = series[series.length - 1] / series[0] - 1;
     var value = change > FLAT ? "up" : change < -FLAT ? "down" : "flat";
-    return { value: value, reason: series.length + "期前比 " + signedPct(change), edge: Math.abs(Math.abs(change) - FLAT) <= EDGE };
+    var reason = "現金 " + series.length + "期前比 " + signedPct(change);
+    var edge = Math.abs(Math.abs(change) - FLAT) <= EDGE;
+    if (change <= -BURN + EDGE && ocf && ocf.length >= 2 && !noCf) {
+      var sum = ocf.reduce(function (a, b) { return a + b; }, 0);
+      reason += "、営業CF " + ocf.length + "期合計 " + oku(sum);
+      if (sum <= 0 && change <= -BURN) {
+        value = "burn";
+        reason += "(本業で稼げず現金が減っている)";
+      } else if (sum > 0) {
+        reason += "(本業は黒字。還元や投資で減ったもの)";
+      }
+      if (sum <= 0) edge = edge || Math.abs(change + BURN) <= EDGE;
+    }
+    return { value: value, reason: reason, edge: edge };
   }
 
   function dividendOf(series) {
@@ -594,7 +611,9 @@
       : CF_SKIP_SECTORS.indexOf(rec.sec) !== -1 && rec.ocf
         ? { value: null, skip: true, series: rec.ocf, reason: "不動産業は物件の仕入れで営業CFが赤字に見えるため判定していません(下の説明)" }
       : rec.ocf ? Object.assign((CF_SUM_SECTORS.indexOf(rec.sec) !== -1 ? cfSumOf(rec.ocf) : cfOf(rec.ocf)) || {}, { series: rec.ocf }) : null;
-    ev.cash = rec.cash ? Object.assign(cashOf(rec.cash) || {}, { series: rec.cash }) : null;
+    // 営業CFを判定しない業種(金融・不動産)では、営業CFの赤字で❌にしない
+    var noCf = fin || CF_SKIP_SECTORS.indexOf(rec.sec) !== -1;
+    ev.cash = rec.cash ? Object.assign(cashOf(rec.cash, rec.ocf, noCf) || {}, { series: rec.cash }) : null;
     ev.dividend = rec.div ? Object.assign(dividendOf(rec.div) || {}, { series: rec.div }) : null;
     // 有報の配当性向は個別(親会社単体)の表にしか載らないことが多い。一般に使う連結の
     // 配当性向に合わせるため、1株配当 ÷ 連結EPS で出す。EPSが無ければ有報の値を使う
