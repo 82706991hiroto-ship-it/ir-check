@@ -38,6 +38,31 @@ SUMMARY = {
     "opinc": ["OperatingProfitLossIFRS", "OperatingIncomeIFRS", "OperatingIncomeLossUSGAAP", "OperatingIncomeLoss"],
 }
 MONEY = {"sales", "ocf", "cash", "opinc"}
+# 配当政策の文章から、配当を下げにくい方針(累進配当・DOE)を拾う
+POLICY = {
+    "累進配当": re.compile(r"累進(的な)?配当|減配(は|を)?(せず|しない|行わない|行わず)|配当(の)?(水準)?を?維持(または|もしくは|又は|ないし)増配|前期(実績)?を下限"),
+    "DOE": re.compile(r"DOE|ＤＯＥ|(株主|自己|純)資本配当率"),
+}
+POLICY_NEG = re.compile(r"(累進配当|DOE|ＤＯＥ)[^。]{0,15}(は採用して|を採用して)(い|お)?(ません|ない|りません)")
+
+
+def policy(text):
+    """(方針のタグ, 根拠の文(2つまで))"""
+    text = re.sub(r"\s+", "", text or "")
+    tags, quotes = [], []
+    for sent in re.split(r"(?<=。)", text):
+        if POLICY_NEG.search(sent):
+            continue
+        for tag, p in POLICY.items():
+            if p.search(sent):
+                if tag not in tags:
+                    tags.append(tag)
+                q = sent if len(sent) <= 140 else sent[:139] + "…"
+                if q not in quotes:
+                    quotes.append(q)
+    return tags, quotes[:2]
+
+
 # 損益計算書側の営業利益(主要な経営指標に営業利益が無い会社が多いため)
 PL_OPINC = ["jpigp_cor:OperatingProfitLossIFRS", "jppfs_cor:OperatingIncome"]
 
@@ -97,6 +122,8 @@ def parse_csv(text):
         return sum(v is not None for v in s)
 
     out = {"fyend": fyend}
+    ptext = facts.get(("jpcrp_cor:DividendPolicyTextBlock", "FilingDateInstant"))
+    out["policy"] = policy(ptext) if ptext else None
     for field, names in SUMMARY.items():
         kind = "Instant" if field in ("eq", "cash", "bps", "shares") else "Duration"
         best = None
@@ -195,6 +222,11 @@ def record(parsed, name, sector):
     p = parsed.get("payout")
     if p and p[-1] is not None:
         rec["payout"] = round(p[-1], 4)
+    if parsed.get("policy") is not None:
+        rec["pc"] = 1  # 配当政策を読んだ
+        tags, quotes = parsed["policy"]
+        if tags:
+            rec["pol"], rec["polq"] = tags, quotes
     return rec
 
 

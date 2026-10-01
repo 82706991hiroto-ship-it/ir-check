@@ -128,6 +128,11 @@
   .chip.is-auto { background: var(--accent-soft); color: var(--accent); }
   .chip.is-manual { background: var(--field); color: var(--text-2); }
   .chip.is-edge { background: #fff4df; color: #9a5b00; }
+  .policy-check { display: flex; gap: 6px; align-items: flex-start; font-size: 12px; color: var(--text-2); margin-top: 10px; line-height: 1.6; }
+  .policy-check input { margin-top: 3px; }
+  .policy-quote { font-size: 11.5px; color: var(--text-2); line-height: 1.75; margin-top: 6px; }
+  .policy-quote:empty { display: none; }
+  .policy-quote q { display: block; margin-top: 4px; padding-left: 10px; border-left: 2px solid var(--line); quotes: none; }
   .chip.is-sector { background: #eef0f6; color: #4a5568; text-decoration: none; }
   .sector-lead { font-size: 12.5px; color: var(--text-2); line-height: 1.9; margin: 0 0 12px; }
   .sector-note { border-top: 1px solid var(--line); padding: 12px 0; font-size: 12.5px; line-height: 1.85; }
@@ -352,9 +357,9 @@
   }
 
   function numberItem(unit, judge) {
-    return { type: "number", unit: unit, judge: function (v, sector) {
+    return { type: "number", unit: unit, judge: function (v, sector, policy) {
       if (v === "" || v === null || isNaN(parseFloat(v))) return { level: NONE, note: "" };
-      return judge(parseFloat(v), sector);
+      return judge(parseFloat(v), sector, policy);
     } };
   }
 
@@ -433,10 +438,11 @@
     },
     {
       key: "payout", name: "配当性向", star: false,
-      rule: "30〜50% → ◎ / 70〜80%超 → ❌ / 30%以下は高配当株には向かない。当期だけ70%超で5期通算が50%以下なら △(ここから悪化していないか要確認)",
-      field: numberItem("%", function (n) {
+      rule: "30〜50% → ◎ / 70〜80%超 → ❌ / 30%以下は高配当株には向かない(累進配当・DOEの会社は増配余力とみて ◎)。当期だけ70%超で5期通算が50%以下なら △(ここから悪化していないか要確認)",
+      field: numberItem("%", function (n, sector, policy) {
         if (n >= 30 && n <= 50) return { level: GOOD };
         if (n > 70) return { level: BAD, note: "高すぎる" };
+        if (n < 30 && policy) return { level: GOOD, note: "増配余力" };
         if (n < 30) return { level: MID, note: "低すぎる" };
         return { level: OK, note: "50〜70%" };
       })
@@ -712,6 +718,14 @@
     return a && a.rec && a.code === (state.subject.code || "").trim().toUpperCase() ? a.rec.sec || "" : "";
   }
 
+  // 配当を下げにくい方針(累進配当・DOE)。有報の配当政策から自動で入り、手でも切り替えられる
+  function policyLabel() {
+    var p = state.values.policy;
+    if (!p) return "";
+    var a = state.auto, tags = a && a.rec && a.code === (state.subject.code || "").trim().toUpperCase() ? a.rec.pol : null;
+    return tags && tags.length ? tags.join("・") : "累進配当・DOE";
+  }
+
   function autoEv(key) {
     var a = state.auto;
     return a && a.ev && a.code === (state.subject.code || "").trim().toUpperCase() ? a.ev[key] : null;
@@ -721,7 +735,7 @@
     var sector = currentSector();
     return ITEMS.map(function (item) {
       var v = state.values[item.key];
-      var res = item.field.judge(v === undefined ? "" : v, sector);
+      var res = item.field.judge(v === undefined ? "" : v, sector, policyLabel());
       var sn = sectorNote(sector, item.key);
       var e = autoEv(item.key);
       var fromAuto = e && state.auto.values && v !== undefined && String(v) === String(state.auto.values[item.key]);
@@ -807,6 +821,19 @@
         inputCell.appendChild(unit);
       }
       controls.appendChild(inputCell);
+      if (item.key === "payout") {
+        var pol = document.createElement("label");
+        pol.className = "policy-check";
+        var cb = document.createElement("input");
+        cb.type = "checkbox"; cb.checked = !!state.values.policy;
+        cb.addEventListener("change", function () { onChange("policy", cb.checked ? "1" : ""); });
+        pol.appendChild(cb);
+        pol.appendChild(document.createTextNode(" 累進配当・DOEなど配当を下げにくい方針がある(低い配当性向を増配余力とみる)"));
+        row.appendChild(pol);
+        var polq = document.createElement("div");
+        polq.className = "policy-quote";
+        row.appendChild(polq);
+      }
 
       var verdict = document.createElement("div");
       verdict.className = "verdict";
@@ -844,6 +871,8 @@
       cell.innerHTML = "";
       var rule0 = cell.parentNode.querySelector(".item-rule");
       if (rule0) rule0.textContent = item.rule;
+      var q0 = cell.parentNode.querySelector(".policy-quote");
+      if (q0) q0.innerHTML = "";
       if (!a || !a.ev || a.code !== (state.subject.code || "").trim().toUpperCase()) return;
       var e = a.ev[item.key];
       if (!e) {
@@ -863,6 +892,16 @@
       if (item.key === "dividend" && e.spike) html += '<a class="chip is-edge" target="_blank" rel="noopener noreferrer" href="https://irbank.net/' +
         encodeURIComponent(a.code) + '/dividend">記念配当かも・IR BANKで確認</a>';
       if (item.key === "payout" && e.avg != null && parseFloat(e.value) > 70 && e.avg <= 50) html += '<span class="chip is-edge">当期だけ基準超え・ここから悪化していないか確認</span>';
+      if (item.key === "payout") {
+        var qbox = cell.parentNode.querySelector(".policy-quote");
+        if (qbox) {
+          var tags = a.rec && a.rec.pol, qs = a.rec && a.rec.polq;
+          qbox.innerHTML = tags && tags.length
+            ? '<span class="chip is-auto">有報の配当政策: ' + escapeHtml(tags.join("・")) + '</span>' +
+              (qs || []).map(function (q) { return '<q>' + escapeHtml(q) + '</q>'; }).join("")
+            : (a.rec && a.rec.pc ? '<span class="pq-none">有報の配当政策に累進配当・DOEの記載はありません。決算説明資料などで新しく宣言していたら、手でチェックしてください。</span>' : "");
+        }
+      }
       if (sn) html += '<a class="chip is-sector" href="#sectorNotes">' + (sn.kind === "skip" ? "判定しない" : "業種に合わせた目安") + '</a>';
       cell.innerHTML = html;
     });
@@ -1198,6 +1237,7 @@
       }
       var values = {};
       Object.keys(ev).forEach(function (k) { if (ev[k] && ev[k].value != null) values[k] = ev[k].value; });
+      if (rec.pol && rec.pol.length) values.policy = "1";
       var prevName = state.auto && state.auto.rec ? state.auto.rec.n : null;
       state.auto = { code: code, fy: rec.fy, rec: rec, ev: ev, values: values };
       if (overwrite) {
