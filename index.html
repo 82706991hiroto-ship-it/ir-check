@@ -128,6 +128,16 @@
   .chip.is-auto { background: var(--accent-soft); color: var(--accent); }
   .chip.is-manual { background: var(--field); color: var(--text-2); }
   .chip.is-edge { background: #fff4df; color: #9a5b00; }
+  .chip.is-sector { background: #eef0f6; color: #4a5568; text-decoration: none; }
+  .sector-lead { font-size: 12.5px; color: var(--text-2); line-height: 1.9; margin: 0 0 12px; }
+  .sector-note { border-top: 1px solid var(--line); padding: 12px 0; font-size: 12.5px; line-height: 1.85; }
+  .sector-note .sn-head { display: flex; flex-wrap: wrap; gap: 4px 10px; align-items: baseline; font-weight: 700; color: var(--text); }
+  .sector-note .sn-how { font-weight: 700; font-size: 11.5px; padding: 1px 8px; border-radius: 999px; background: var(--field); color: var(--text-2); }
+  .sector-note.is-skip .sn-how { background: #eef0f6; }
+  .sector-note.is-adjust .sn-how { background: var(--accent-soft); color: var(--accent); }
+  .sector-note .sn-why { color: var(--text-2); margin-top: 4px; }
+  .sector-note.is-current { background: #fffaf0; margin: 0 -12px; padding: 12px; border-radius: 10px; border-top-color: transparent; }
+  .sector-note.is-current .sn-now { font-size: 11px; color: #9a5b00; font-weight: 700; }
   .auto-status { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-top: 12px; font-size: 12.5px; color: var(--text-2); }
   .btn-link { font-family: inherit; font-size: 12px; background: none; border: none; padding: 0; color: var(--accent); cursor: pointer; text-decoration: underline; }
   .source-note { margin: 0 0 12px; line-height: 1.85; }
@@ -291,6 +301,14 @@
     </div>
   </section>
 
+  <section class="panel" id="sectorNotes">
+    <h2><span class="chap">五</span>業種によって扱いを変えている項目</h2>
+    <p class="sector-lead">ノートの基準をそのまま当てはめると、業種の性質だけで❌になってしまう項目があります。
+      指標の意味は通じていて水準だけが違うものは<strong>業種に合わせた目安</strong>で判定し、その業種では良し悪しを表せないものは<strong>判定しません</strong>(集計からも外します)。
+      自動採点した銘柄が当てはまるときは、項目に印が付き、下の該当する行が色付きになります。</p>
+    <div class="sector-notes" id="sectorNoteList"></div>
+  </section>
+
   <a class="sibling" href="../haito-dashboard/">
     <span class="ico">¥</span>
     <span class="txt"><span class="ttl">高配当株ポートフォリオダッシュボード</span><span class="sub">持っている株の配当構成比・カレンダー・増配率を見る</span></span>
@@ -334,9 +352,9 @@
   }
 
   function numberItem(unit, judge) {
-    return { type: "number", unit: unit, judge: function (v) {
+    return { type: "number", unit: unit, judge: function (v, sector) {
       if (v === "" || v === null || isNaN(parseFloat(v))) return { level: NONE, note: "" };
-      return judge(parseFloat(v));
+      return judge(parseFloat(v), sector);
     } };
   }
 
@@ -364,7 +382,12 @@
     {
       key: "opm", name: "営業利益率", star: true,
       rule: "10%以上 → ◎ / 5%以下 → ❌",
-      field: numberItem("%", function (n) {
+      field: numberItem("%", function (n, sector) {
+        if (LOW_MARGIN_SECTORS.indexOf(sector) !== -1) {
+          if (n >= 5) return { level: GOOD, note: "業種の目安" };
+          if (n <= 2) return { level: BAD, note: "業種の目安" };
+          return { level: OK, note: "2〜5%(業種の目安)" };
+        }
         if (n >= 10) return { level: GOOD };
         if (n <= 5) return { level: BAD };
         return { level: OK, note: "5〜10%" };
@@ -447,6 +470,36 @@
   // 決まりの境目(±2ポイント以内)にあるものは「境目」と出し、断定しない。
   var FLAT = 0.10, DROP = 0.10, SWING = 0.15, EDGE = 0.02;
   var FINANCIAL_SECTORS = ["銀行業", "保険業", "証券、商品先物取引業", "その他金融業"];
+  // 薄利多売が当たり前の業種。営業利益率は業種に合わせた目安(◎5%以上 / ❌2%以下)で判定する
+  var LOW_MARGIN_SECTORS = ["卸売業", "小売業"];
+  // 工事代金の入金時期で営業CFが年ごとに振れる業種。毎年ではなく5期の合計で判定する
+  var CF_SUM_SECTORS = ["建設業"];
+  // 物件の仕入れが営業CFから出ていき、成長するほど赤字に見える業種。営業CFは判定しない
+  var CF_SKIP_SECTORS = ["不動産業"];
+
+  // 業種によって扱いを変えている項目。画面下の説明と、各項目の印に使う
+  var SECTOR_NOTES = [
+    { sectors: FINANCIAL_SECTORS, keys: ["equity", "cf", "opm"], kind: "skip",
+      label: "銀行・保険・証券・その他金融", items: "自己資本比率・営業CF・営業利益率", how: "判定しない",
+      why: "銀行は預金という預かったお金を貸し出すので負債が大きく、自己資本比率は普通でも5%前後です(健全性は自己資本規制比率という別の指標で見ます)。" +
+           "営業CFは預金や貸出の増減だけで大きく動き、本業が好調でも赤字の年が普通にあります。" +
+           "また、決算に売上高・営業利益という項目がなく(経常収益・経常利益で表します)、一般の会社と同じ物差しで比べられません。" },
+    { sectors: LOW_MARGIN_SECTORS, keys: ["opm"], kind: "adjust",
+      label: "卸売業・小売業", items: "営業利益率", how: "◎5%以上 / ❌2%以下 で判定",
+      why: "大量に仕入れて薄く利益を乗せる商売なので、利益率が低いのが当たり前です(上場企業の中央値は卸売3.2%・小売3.6%で、元の基準だと約7割が❌)。" +
+           "それでも同じ業種の中では利益率が高い会社ほど稼ぐ力があるので、判定はやめずに業種に合った水準で見ます。" },
+    { sectors: CF_SUM_SECTORS, keys: ["cf"], kind: "adjust",
+      label: "建設業", items: "営業CF", how: "5期の合計が黒字かで判定",
+      why: "工事代金は完成時にまとめて入ることが多く、入金のずれで年によって赤字になります(上場企業の約7割に赤字の年があります)。" +
+           "5期をならせば本業の稼ぎを表すので、毎年黒字かではなく5期の合計で見ます。" },
+    { sectors: CF_SKIP_SECTORS, keys: ["cf"], kind: "skip",
+      label: "不動産業", items: "営業CF", how: "判定しない",
+      why: "売るための物件を買うと、そのお金が営業CFから出ていく扱いになります。仕入れを増やすほど赤字に見え、成長している会社ほど悪く見えるため、" +
+           "基準をどう変えても良し悪しを表せません(上場企業の7割以上に赤字の年があります)。" }
+  ];
+  function sectorNote(sector, key) {
+    return SECTOR_NOTES.filter(function (n) { return n.sectors.indexOf(sector) !== -1 && n.keys.indexOf(key) !== -1; })[0] || null;
+  }
 
   function signedPct(x, d) { return (x >= 0 ? "+" : "−") + Math.abs(x * 100).toFixed(d == null ? 0 : d) + "%"; }
 
@@ -492,6 +545,18 @@
     return { value: "positive", reason: series.length + "期とも黒字、" + series.length + "期前比 " + signedPct(change) };
   }
 
+  // 建設業向け: 毎年ではなく5期の合計で見る
+  function cfSumOf(series) {
+    if (!series || series.length < 2) return null;
+    var sum = series.reduce(function (a, b) { return a + b; }, 0);
+    var neg = series.filter(function (v) { return v <= 0; }).length;
+    var head = series.length + "期合計 " + (sum >= 0 ? "+" : "−") + Math.abs(Math.round(sum)).toLocaleString("ja-JP") + "百万円"
+      + (neg > 0 ? "(赤字の年" + neg + "回。建設業は入金時期で振れるので合計で判定)" : "");
+    if (sum <= 0) return { value: "negative", reason: head };
+    var change = series[series.length - 1] / series[0] - 1;
+    return { value: series[0] > 0 && change > 0 ? "growing" : "positive", reason: head };
+  }
+
   function cashOf(series) {
     if (!series || series.length < 2 || series[0] <= 0) return null;
     var change = series[series.length - 1] / series[0] - 1;
@@ -517,7 +582,7 @@
   // 取り込んだ1社分の数字から、項目ごとの初期値と根拠を作る
   function scoreRecord(rec) {
     var fin = FINANCIAL_SECTORS.indexOf(rec.sec) !== -1;
-    var skip = { value: null, reason: "銀行・保険などは業態が違い、この基準が当てはまらないため自動で判定していません" };
+    var skip = { value: null, skip: true, reason: "銀行・保険などは業態が違い、この基準が当てはまらないため判定していません(下の説明)" };
     var ev = {};
     ev.sales = rec.sales ? Object.assign(trendOf(rec.sales, true) || {}, { series: rec.sales }) : null;
     ev.eps = rec.eps ? Object.assign(trendOf(rec.eps, false) || {}, { series: rec.eps }) : null;
@@ -525,7 +590,10 @@
       ? { value: (rec.opm * 100).toFixed(1), reason: "当期の営業利益 ÷ 売上高" }
       : { value: null, reason: "営業利益を開示していない会社です(IFRSの商社など)" };
     ev.equity = fin ? skip : rec.eq ? { value: (lastOf(rec.eq) * 100).toFixed(1), reason: "当期末", series: rec.eq } : null;
-    ev.cf = fin ? skip : rec.ocf ? Object.assign(cfOf(rec.ocf) || {}, { series: rec.ocf }) : null;
+    ev.cf = fin ? skip
+      : CF_SKIP_SECTORS.indexOf(rec.sec) !== -1 && rec.ocf
+        ? { value: null, skip: true, series: rec.ocf, reason: "不動産業は物件の仕入れで営業CFが赤字に見えるため判定していません(下の説明)" }
+      : rec.ocf ? Object.assign((CF_SUM_SECTORS.indexOf(rec.sec) !== -1 ? cfSumOf(rec.ocf) : cfOf(rec.ocf)) || {}, { series: rec.ocf }) : null;
     ev.cash = rec.cash ? Object.assign(cashOf(rec.cash) || {}, { series: rec.cash }) : null;
     ev.dividend = rec.div ? Object.assign(dividendOf(rec.div) || {}, { series: rec.div }) : null;
     // 有報の配当性向は個別(親会社単体)の表にしか載らないことが多い。一般に使う連結の
@@ -601,11 +669,21 @@
     try { localStorage.setItem(STORAGE_KEY, JSON.stringify(state)); } catch (e) {}
   }
 
+  // 自動採点した銘柄の業種(コードを変えたら外れる)
+  function currentSector() {
+    var a = state.auto;
+    return a && a.rec && a.code === (state.subject.code || "").trim().toUpperCase() ? a.rec.sec || "" : "";
+  }
+
   function judgeAll() {
+    var sector = currentSector();
     return ITEMS.map(function (item) {
       var v = state.values[item.key];
-      var res = item.field.judge(v === undefined ? "" : v);
-      return { item: item, value: v, level: res.level, note: res.note || "" };
+      var res = item.field.judge(v === undefined ? "" : v, sector);
+      var sn = sectorNote(sector, item.key);
+      // 判定しない項目は、手で入れていなければ集計から外す
+      var skipped = !!(sn && sn.kind === "skip" && (v === undefined || v === ""));
+      return { item: item, value: v, level: res.level, note: res.note || "", skipped: skipped };
     });
   }
 
@@ -712,6 +790,8 @@
       var cell = document.querySelector('.item[data-key="' + item.key + '"] .item-evidence');
       if (!cell) return;
       cell.innerHTML = "";
+      var rule0 = cell.parentNode.querySelector(".item-rule");
+      if (rule0) rule0.textContent = item.rule;
       if (!a || !a.ev || a.code !== (state.subject.code || "").trim().toUpperCase()) return;
       var e = a.ev[item.key];
       if (!e) {
@@ -725,6 +805,10 @@
       if (autoVal !== undefined && autoVal !== null && String(cur) === String(autoVal)) html += '<span class="chip is-auto">有報から自動</span>';
       else if (autoVal !== undefined && autoVal !== null && cur !== undefined) html += '<span class="chip is-manual">手で変更</span>';
       if (e.edge) html += '<span class="chip is-edge">境目</span>';
+      var sn = sectorNote(a.rec && a.rec.sec, item.key);
+      var ruleEl = cell.parentNode.querySelector(".item-rule");
+      if (ruleEl && sn) ruleEl.textContent = item.rule + "(" + sn.label + "は " + sn.how + ")";
+      if (sn) html += '<a class="chip is-sector" href="#sectorNotes">' + (sn.kind === "skip" ? "判定しない" : "業種に合わせた目安") + '</a>';
       cell.innerHTML = html;
     });
   }
@@ -745,6 +829,11 @@
     judgeAll().forEach(function (r) {
       var cell = document.querySelector('.item[data-key="' + r.item.key + '"] .verdict');
       if (!cell) return;
+      if (r.skipped) {
+        cell.className = "verdict v-none";
+        cell.innerHTML = "—<small>判定しない</small>";
+        return;
+      }
       cell.className = "verdict " + MARK_CLASS[r.level];
       cell.innerHTML = MARK[r.level] + (r.note ? '<small>' + r.note + '</small>' : '');
     });
@@ -752,7 +841,8 @@
 
   // ---------- 総合 ----------
   function summarize() {
-    var results = judgeAll();
+    var all = judgeAll();
+    var results = all.filter(function (r) { return !r.skipped; });
     var counts = { good: 0, ok: 0, mid: 0, bad: 0, none: 0 };
     results.forEach(function (r) { counts[r.level]++; });
 
@@ -761,7 +851,7 @@
     var starsPassing = stars.filter(function (r) { return r.level === GOOD || r.level === OK; });
 
     return {
-      results: results, counts: counts,
+      results: results, counts: counts, skippedCount: all.length - results.length,
       answered: results.length - counts.none,
       starTotal: stars.length,
       starFilled: starsFilled.length,
@@ -778,10 +868,12 @@
       '<div class="stat"><div class="label">○</div><div class="value">' + s.counts.ok + '<span class="unit">項目</span></div></div>' +
       '<div class="stat"><div class="label">△</div><div class="value">' + s.counts.mid + '<span class="unit">項目</span></div></div>' +
       '<div class="stat"><div class="label">❌</div><div class="value' + (s.counts.bad > 0 ? ' is-bad' : '') + '">' + s.counts.bad + '<span class="unit">項目</span></div></div>' +
-      '<div class="stat"><div class="label">重要4項目(★)</div><div class="value">' + s.starPassing + '<span class="unit">/ ' + s.starTotal + ' が◎○</span></div></div>' +
-      '<div class="stat"><div class="label">入力済み</div><div class="value">' + s.answered + '<span class="unit">/ ' + s.results.length + '</span></div></div>';
+      '<div class="stat"><div class="label">重要項目(★)</div><div class="value">' + s.starPassing + '<span class="unit">/ ' + s.starTotal + ' が◎○</span></div></div>' +
+      '<div class="stat"><div class="label">入力済み</div><div class="value">' + s.answered + '<span class="unit">/ ' + s.results.length +
+      (s.skippedCount ? '(' + s.skippedCount + '項目は判定しない)' : '') + '</span></div></div>';
 
     renderComposite();
+    renderSectorNotes();
     var readout = document.getElementById("readout");
     readout.className = "readout";
     if (s.answered === 0) {
@@ -796,10 +888,28 @@
     } else if (s.answered < s.results.length) {
       readout.textContent = "いまのところ❌はありません。残り " + (s.results.length - s.answered) + " 項目を埋めると判断材料が揃います。";
     } else if (s.starPassing === s.starTotal && s.counts.mid === 0) {
-      readout.innerHTML = "<strong>10項目すべてが基準内で、★の重要4項目も◎○です。</strong>投資候補として検討できる水準です。";
+      readout.innerHTML = "<strong>" + (s.skippedCount ? "判定した" + s.results.length + "項目" : "10項目") + "すべてが基準内で、★の重要" +
+        s.starTotal + "項目も◎○です。</strong>投資候補として検討できる水準です。";
     } else {
       readout.innerHTML = "<strong>❌はありません。</strong>△が" + s.counts.mid + "項目あるので、その項目が許容できるかを確認してください。";
     }
+  }
+
+  function renderSectorNotes() {
+    var box = document.getElementById("sectorNoteList");
+    if (!box) return;
+    var sector = currentSector();
+    box.innerHTML = "";
+    SECTOR_NOTES.forEach(function (n) {
+      var d = document.createElement("div");
+      var cur = n.sectors.indexOf(sector) !== -1;
+      d.className = "sector-note is-" + n.kind + (cur ? " is-current" : "");
+      d.innerHTML = '<div class="sn-head"><span>' + escapeHtml(n.label) + ' の ' + escapeHtml(n.items) + '</span>' +
+        '<span class="sn-how">' + escapeHtml(n.how) + '</span>' +
+        (cur ? '<span class="sn-now">この銘柄(' + escapeHtml(sector) + ')が当てはまります</span>' : '') + '</div>' +
+        '<div class="sn-why">' + escapeHtml(n.why) + '</div>';
+      box.appendChild(d);
+    });
   }
 
   function renderComposite() {
@@ -943,6 +1053,8 @@
       var e = a && a.ev[r.item.key];
       var why = e && e.reason ? e.reason.replace(/\|/g, "/") : "";
       if (a && a.values[r.item.key] !== undefined && String(r.value) !== String(a.values[r.item.key])) why += "(手で変更)";
+      var sn = a && sectorNote(a.rec && a.rec.sec, r.item.key);
+      if (sn) why += "(" + sn.label + "は" + sn.how + ")";
       lines.push("| " + name + " | " + (labelOf(r.item, r.value) || "—") + " | " + MARK[r.level] + (r.note ? "(" + r.note + ")" : "") + " | " + (why || "—") + " |");
     });
     lines.push("");
