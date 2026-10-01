@@ -183,6 +183,8 @@
   button.btn.primary { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); }
   button.btn.primary:hover { opacity: .9; background: var(--accent); }
   .toolbar-status { font-size: 12px; color: var(--text-2); }
+  .to-haito-note { font-size: 12px; color: var(--text-2); margin: 16px 0 0; line-height: 1.7; }
+  .to-haito-note a { color: var(--accent); }
 
   /* 保存一覧 */
   table.saved { width: 100%; border-collapse: collapse; font-size: 13px; }
@@ -267,8 +269,10 @@
       <li>配当性向が安定していて増配を続けている会社は投資候補。</li>
       <li>配当性向が高まっていたり、EPSの成長が鈍化しているのに減配しない会社は注意。</li>
     </ul>
+    <p class="to-haito-note">「買い増し候補へ」を押すと、評価を保存して<a href="../haito-dashboard/#extras">高配当株ポートフォリオダッシュボード</a>の候補に入れます。そこで目標利回りになる株価や、買ったときの配分を試算できます。</p>
     <div class="toolbar">
-      <button class="btn primary" id="saveBtn">この評価を保存</button>
+      <button class="btn primary" id="toHaitoBtn">保存して買い増し候補へ →</button>
+      <button class="btn" id="saveBtn">この評価を保存</button>
       <button class="btn" id="copyBtn">Markdownでコピー</button>
       <button class="btn" id="resetBtn">入力をクリア</button>
       <span class="toolbar-status" id="toolbarStatus"></span>
@@ -885,12 +889,17 @@
     document.getElementById("toolbarStatus").textContent = text;
   }
 
-  document.getElementById("saveBtn").addEventListener("click", function () {
+  // 同じ銘柄を同じ日にもう一度保存したときは、前の記録を置き換える
+  function saveEvaluation() {
     var s = summarize();
-    if (s.answered === 0) { setStatus("先に項目を入力してください。"); return; }
+    if (s.answered === 0) { setStatus("先に項目を入力してください。"); return false; }
+    var code = (state.subject.code || "").trim().toUpperCase(), date = todayStamp();
+    state.saved = state.saved.filter(function (x) {
+      return !(code && (x.code || "").trim().toUpperCase() === code && x.date === date);
+    });
     state.saved.push({
       id: Math.random().toString(36).slice(2, 10),
-      date: todayStamp(),
+      date: date,
       code: state.subject.code,
       name: state.subject.name,
       values: Object.assign({}, state.values),
@@ -899,7 +908,23 @@
       starTotal: s.starTotal
     });
     save(); renderSaved();
-    setStatus("保存しました。");
+    return true;
+  }
+
+  document.getElementById("saveBtn").addEventListener("click", function () {
+    if (saveEvaluation()) setStatus("保存しました。");
+  });
+
+  // ダッシュボード(同じサイトの ../haito-dashboard/)の買い増し候補に入れる。
+  // 採点結果はこの端末の保存から向こうが読むので、渡すのはコードと株価だけ
+  document.getElementById("toHaitoBtn").addEventListener("click", function () {
+    var code = (state.subject.code || "").trim().toUpperCase();
+    if (!/^[0-9][0-9A-Z]{3}$/.test(code)) { setStatus("証券コードを入れてください。"); document.getElementById("subjCode").focus(); return; }
+    if (!saveEvaluation()) return;
+    var url = "../haito-dashboard/?watch=" + encodeURIComponent(code);
+    var price = parseFloat(state.subject.price);
+    if (price > 0) url += "&price=" + encodeURIComponent(price);
+    location.href = url;
   });
 
   // Obsidianなどに貼り付けられるよう、表形式のMarkdownで書き出す。
@@ -965,6 +990,7 @@
 
   // 数字は証券コードの頭の数字ごとのファイルにまとめてあり、必要な1つだけ読む
   var finCache = {};
+  var fromLink = null;
   function loadRecord(code) {
     var head = code.charAt(0);
     if (!finCache[head]) {
@@ -1076,10 +1102,40 @@
   document.getElementById("dateline").textContent =
     d.getFullYear() + "年" + (d.getMonth() + 1) + "月" + d.getDate() + "日 時点";
 
+  // ダッシュボードの候補から来たとき(?code=コード)。前に保存した評価があればそれを開き、
+  // なければ有価証券報告書から採点する
+  (function () {
+    var q;
+    try { q = new URLSearchParams(location.search); } catch (e) { return; }
+    var code = String(q.get("code") || "").normalize("NFKC").trim().toUpperCase();
+    if (!/^[0-9][0-9A-Z]{3}$/.test(code)) return;
+    try { history.replaceState(null, "", location.pathname); } catch (e) {}
+    var price = parseFloat(q.get("price"));
+    var last = state.saved.filter(function (x) { return (x.code || "").trim().toUpperCase() === code; }).pop();
+    if (last) {
+      state.subject = { code: code, name: last.name || "", price: price > 0 ? String(price) : "" };
+      state.values = Object.assign({}, last.values);
+      state.auto = null;
+      save();
+      fromLink = { code: code, overwrite: false, msg: last.date + " に保存した評価を開きました。" };
+    } else if ((state.subject.code || "").trim().toUpperCase() !== code) {
+      state.subject = { code: code, name: "", price: price > 0 ? String(price) : "" };
+      state.values = {};
+      state.auto = null;
+      save();
+      fromLink = { code: code, overwrite: true, msg: "" };
+    }
+  })();
+
   renderSubject();
   renderItems();
   renderTally();
   renderSaved();
+  if (fromLink) {
+    setAutoStatus("有価証券報告書のデータを読み込んでいます…", false);
+    applyAuto(fromLink.code, fromLink.overwrite);
+    if (fromLink.msg) setStatus(fromLink.msg);
+  }
   // 前回の採点を開き直したときも、どこから来た値かを出しておく
   if (state.auto && state.auto.code === (state.subject.code || "").trim().toUpperCase()) {
     var fy = state.auto.fy ? state.auto.fy.slice(0, 7).replace("-", "年") + "月期の" : "";
