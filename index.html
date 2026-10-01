@@ -433,7 +433,7 @@
     },
     {
       key: "payout", name: "配当性向", star: false,
-      rule: "30〜50% → ◎ / 70〜80%超 → ❌ / 30%以下は高配当株には向かない",
+      rule: "30〜50% → ◎ / 70〜80%超 → ❌ / 30%以下は高配当株には向かない。当期だけ70%超で5期通算が50%以下なら △(ここから悪化していないか要確認)",
       field: numberItem("%", function (n) {
         if (n >= 30 && n <= 50) return { level: GOOD };
         if (n > 70) return { level: BAD, note: "高すぎる" };
@@ -591,7 +591,14 @@
     var value = cut > 0 ? "cut" : flat === 0 ? "growing" : "stable";
     var reason = series.map(function (v) { return String(Math.round(v * 100) / 100); }).join("→") + "円"
       + (value === "growing" ? "(" + (series.length - 1) + "期連続増配)" : cut > 0 ? "(減配" + cut + "回)" : "(減配なし)");
-    return { value: value, reason: reason };
+    // 減配がどれも「ある年だけ突出して、翌年に元の水準以上へ戻った」形なら、記念配当・特別配当の反動かもしれない。
+    // 判定は❌のまま、確認を促す印を付ける
+    var spike = cut > 0;
+    for (var j = 1; j < series.length; j++) {
+      if (series[j] < series[j - 1] && !(j >= 2 && series[j - 1] > series[j - 2] && series[j] >= series[j - 2])) spike = false;
+    }
+    if (spike) reason += "。突出した年の翌年に元の水準へ戻っただけなので、記念配当・特別配当の反動かもしれません";
+    return { value: value, reason: reason, spike: spike };
   }
 
   function lastOf(a) { return a && a.length ? a[a.length - 1] : null; }
@@ -622,6 +629,17 @@
       ? { value: (dLast / eLast * 100).toFixed(1), reason: "当期の1株配当 " + dLast + "円 ÷ EPS " + eLast + "円(連結)" }
       : rec.payout != null ? { value: (rec.payout * 100).toFixed(1), reason: "当期(個別の配当性向)" } : null;
     if (eLast != null && eLast <= 0 && dLast > 0) ev.payout = { value: null, reason: "当期のEPSが赤字のため配当性向を出せません(利益以上に配当しています)" };
+    // 5期通算の配当性向(配当の合計 ÷ 黒字の期のEPSの合計)。当期だけ高いのかを見分ける
+    if (ev.payout && ev.payout.value != null && rec.div && rec.eps) {
+      var n = Math.min(rec.div.length, rec.eps.length);
+      var ds = rec.div.slice(-n), es = rec.eps.slice(-n);
+      var eSum = es.reduce(function (a, b) { return a + (b > 0 ? b : 0); }, 0);
+      var dSum = ds.reduce(function (a, b) { return a + b; }, 0);
+      if (n >= 3 && eSum > 0) {
+        ev.payout.avg = dSum / eSum * 100;
+        ev.payout.reason += "。" + n + "期通算 " + ev.payout.avg.toFixed(1) + "%";
+      }
+    }
 
     // 数字の項目も、基準値のすぐ近くは「境目」とする
     var EDGES = { opm: [10, 5], equity: [60, 40, 10], payout: [30, 50, 70], roe: [8, 5], pbr: [0.5, 1, 1.5] };
@@ -694,12 +712,27 @@
     return a && a.rec && a.code === (state.subject.code || "").trim().toUpperCase() ? a.rec.sec || "" : "";
   }
 
+  function autoEv(key) {
+    var a = state.auto;
+    return a && a.ev && a.code === (state.subject.code || "").trim().toUpperCase() ? a.ev[key] : null;
+  }
+
   function judgeAll() {
     var sector = currentSector();
     return ITEMS.map(function (item) {
       var v = state.values[item.key];
       var res = item.field.judge(v === undefined ? "" : v, sector);
       var sn = sectorNote(sector, item.key);
+      var e = autoEv(item.key);
+      var fromAuto = e && state.auto.values && v !== undefined && String(v) === String(state.auto.values[item.key]);
+      // 配当性向: 当期だけ70%を超え、5期通算では50%以下 → 一時的かもしれないので△(今期から悪化していないかは要確認)
+      if (item.key === "payout" && res.level === BAD && fromAuto && e.avg != null && e.avg <= 50) {
+        res = { level: MID, note: "当期は高い(5期通算" + e.avg.toFixed(0) + "%)" };
+      }
+      // 1株配当: 記念配当の反動かもしれない減配は❌のまま、確認を促す
+      if (item.key === "dividend" && res.level === BAD && fromAuto && e.spike) {
+        res = { level: BAD, note: "記念配当の反動？要確認" };
+      }
       // 判定しない項目は、手で入れていなければ集計から外す
       var skipped = !!(sn && sn.kind === "skip" && (v === undefined || v === ""));
       return { item: item, value: v, level: res.level, note: res.note || "", skipped: skipped };
@@ -827,6 +860,9 @@
       var sn = sectorNote(a.rec && a.rec.sec, item.key);
       var ruleEl = cell.parentNode.querySelector(".item-rule");
       if (ruleEl && sn) ruleEl.textContent = item.rule + "(" + sn.label + "は " + sn.how + ")";
+      if (item.key === "dividend" && e.spike) html += '<a class="chip is-edge" target="_blank" rel="noopener noreferrer" href="https://irbank.net/' +
+        encodeURIComponent(a.code) + '/dividend">記念配当かも・IR BANKで確認</a>';
+      if (item.key === "payout" && e.avg != null && parseFloat(e.value) > 70 && e.avg <= 50) html += '<span class="chip is-edge">当期だけ基準超え・ここから悪化していないか確認</span>';
       if (sn) html += '<a class="chip is-sector" href="#sectorNotes">' + (sn.kind === "skip" ? "判定しない" : "業種に合わせた目安") + '</a>';
       cell.innerHTML = html;
     });
