@@ -31,6 +31,7 @@ SUMMARY = {
             "NetCashProvidedByUsedInOperatingActivities"],
     "cash": ["CashAndCashEquivalentsIFRS", "CashAndCashEquivalentsUSGAAP", "CashAndCashEquivalents"],
     "div": ["DividendPaidPerShare"],
+    "interim": ["InterimDividendPaidPerShare"],
     "bps": ["EquityAttributableToOwnersOfParentPerShareIFRS", "EquityAttributableToOwnersOfParentPerShareUSGAAP",
             "NetAssetsPerShare"],
     "payout": ["PayoutRatio"],
@@ -137,7 +138,7 @@ def parse_csv(text):
             cons, solo = series(name, kind, ""), series(name, kind, "_NonConsolidatedMember")
             # 連結を使う。連結の値が1期分以下(連結を始めたばかりなど)なら個別。
             # 1株配当・配当性向・株数は個別の表に載るので、こちらは個別を先に見る
-            pref = (solo, cons) if field in ("div", "payout", "shares") else (cons, solo)
+            pref = (solo, cons) if field in ("div", "interim", "payout", "shares") else (cons, solo)
             pick = pref[0] if filled(pref[0]) >= 2 or not filled(pref[1]) else pref[1]
             if filled(pick):
                 best = pick
@@ -166,14 +167,31 @@ def snap(ratio):
     return None
 
 
-def adjust_div(divs, shares):
-    """古い順の1株配当を、当期の株数基準に割り戻す(分割前の実額で載っている会社だけ)。"""
+def adjust_div(divs, shares, interims=None):
+    """古い順の1株配当を、当期の株数基準に割り戻す(分割前の実額で載っている会社だけ)。
+
+    期の途中で分割した年は、中間配当が分割前・期末配当が分割後の株数で払われ、年間の1株配当が混ざった値になる。
+    中間配当が分かれば、中間配当を分割の倍率で割り戻して期末配当と足し、分割後の株数基準の年間配当に直す。
+    """
     out = list(divs)
+    interims = interims or [None] * len(divs)
+    mixed = [False] * len(divs)
+    for t in range(1, len(divs)):
+        f = snap(shares[t] / shares[t - 1]) if shares[t] and shares[t - 1] else 1.0
+        it = interims[t]
+        if f and f >= 1.5 and it and 0 < it < divs[t] and divs[t - 1] > 0:
+            # 中間配当が分割前の水準(前期の年間配当の半分前後)なら、その年は混ざっている。
+            # 分割後の水準なら前期の半分÷倍率前後になるので、その間(0.5÷√倍率)で見分ける
+            if it / divs[t - 1] > 0.5 / f ** 0.5:
+                out[t] = round(it / f + (divs[t] - it), 2)
+                mixed[t] = True
+    divs = list(out)
     factor = 1.0
     for t in range(len(divs) - 2, -1, -1):
         f = snap(shares[t + 1] / shares[t]) if shares[t] and shares[t + 1] else 1.0
         # 株数が分割らしい倍率で増え、配当がほぼその分下がっていれば、分割前の実額とみなす
-        if f and f > 1 and divs[t] > 0 and divs[t + 1] / divs[t] < 0.75:
+        # 混ざった年を直したところは分割が確かなので、必ず割り戻す
+        if f and f > 1 and divs[t] > 0 and (mixed[t + 1] or divs[t + 1] / divs[t] < 0.75):
             factor *= f
         out[t] = round(divs[t] / factor, 2)
     return trim(out, shares)
@@ -216,9 +234,10 @@ def record(parsed, name, sector):
         if s and all(-5 < v < 5 for v in s):
             rec[field] = [round(v, 4) for v in s]
     d, sh = parsed.get("div"), parsed.get("shares") or [None] * 5
+    it = parsed.get("interim") or [None] * 5
     if d and d[-1] is not None:
         keep = [i for i, v in enumerate(d) if v is not None]
-        rec["div"] = adjust_div([d[i] for i in keep], [sh[i] for i in keep])
+        rec["div"] = adjust_div([d[i] for i in keep], [sh[i] for i in keep], [it[i] for i in keep])
     b = tail(parsed.get("bps"))
     if b:
         rec["bps"] = b[-1]
