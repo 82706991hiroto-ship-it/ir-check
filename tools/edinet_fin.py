@@ -308,6 +308,33 @@ def save_fin(fin):
             json.dump(dict(sorted(m.items())), f, ensure_ascii=False, separators=(",", ":"))
 
 
+def write_policy(fin):
+    """累進配当・DOEの会社の一覧(policy.json)。一覧ページが読む小さなデータ"""
+    rows = []
+    for m in fin.values():
+        for code, r in m.items():
+            if not r.get("pol"):
+                continue
+            d, e = r.get("div") or [], r.get("eps") or []
+            up = 0
+            for k in range(len(d) - 1, 0, -1):
+                if d[k] > d[k - 1]:
+                    up += 1
+                else:
+                    break
+            rows.append({
+                "c": code, "n": r.get("n", ""), "s": r.get("sec", ""), "p": r["pol"], "fy": (r.get("fy") or "")[:7],
+                "d": d, "po": round(d[-1] / e[-1] * 100, 1) if d and e and e[-1] > 0 else None,
+                "up": up, "q": r.get("polq", []),
+            })
+    rows.sort(key=lambda x: x["c"])
+    out = {"built": dt.date.today().isoformat(), "checked": sum(1 for m in fin.values() for r in m.values() if r.get("pc")),
+           "rows": rows}
+    with open(os.path.join(ROOT, "policy.json"), "w", encoding="utf-8") as f:
+        json.dump(out, f, ensure_ascii=False, separators=(",", ":"))
+    return len(rows)
+
+
 def cmd_update(days):
     fin = load_fin()
     filings = recent_filings(days)
@@ -344,6 +371,7 @@ def cmd_update(days):
             fin[code[0]][code] = record(parsed, name, sector)
             changed.append(code + ("" if old else "(新規)"))
     save_fin(fin)
+    print("累進配当・DOEの会社", write_policy(fin), "社")
     print("更新", len(changed), "社:", " ".join(changed[:60]) + (" …" if len(changed) > 60 else ""))
     return changed
 
@@ -351,6 +379,7 @@ def cmd_update(days):
 def main():
     ap = argparse.ArgumentParser()
     sub = ap.add_subparsers(dest="cmd", required=True)
+    sub.add_parser("policy")
     u = sub.add_parser("update")
     u.add_argument("--days", type=int, default=45)
     d = sub.add_parser("doc")
@@ -358,6 +387,8 @@ def main():
     a = ap.parse_args()
     if a.cmd == "update":
         cmd_update(a.days)
+    elif a.cmd == "policy":
+        print(write_policy(load_fin()))
     else:
         print(json.dumps(record(download(a.doc_id), "", ""), ensure_ascii=False))
 

@@ -130,6 +130,7 @@
   .chip.is-edge { background: #fff4df; color: #9a5b00; }
   .policy-check { display: flex; gap: 6px; align-items: flex-start; font-size: 12px; color: var(--text-2); margin-top: 10px; line-height: 1.6; }
   .policy-check input { margin-top: 3px; }
+  .policy-link { margin-left: 6px; color: var(--accent); white-space: nowrap; }
   .policy-quote { font-size: 11.5px; color: var(--text-2); line-height: 1.75; margin-top: 6px; }
   .policy-quote:empty { display: none; }
   .policy-quote q { display: block; margin-top: 4px; padding-left: 10px; border-left: 2px solid var(--line); quotes: none; }
@@ -305,6 +306,12 @@
       </table>
     </div>
   </section>
+
+  <a class="sibling" href="policy.html">
+    <span class="ico">↗</span>
+    <span class="txt"><span class="ttl">累進配当・DOEの会社を探す</span><span class="sub">配当を下げにくい方針の会社の一覧(有報の配当政策から)。業種・配当性向・連続増配で絞り込めます</span></span>
+    <span class="arw">›</span>
+  </a>
 
   <section class="panel" id="sectorNotes">
     <h2><span class="chap">五</span>業種によって扱いを変えている項目</h2>
@@ -829,6 +836,9 @@
         cb.addEventListener("change", function () { onChange("policy", cb.checked ? "1" : ""); });
         pol.appendChild(cb);
         pol.appendChild(document.createTextNode(" 累進配当・DOEなど配当を下げにくい方針がある(低い配当性向を増配余力とみる)"));
+        var plink = document.createElement("a");
+        plink.href = "policy.html"; plink.textContent = "一覧"; plink.className = "policy-link";
+        pol.appendChild(plink);
         row.appendChild(pol);
         var polq = document.createElement("div");
         polq.className = "policy-quote";
@@ -898,7 +908,7 @@
           var tags = a.rec && a.rec.pol, qs = a.rec && a.rec.polq;
           qbox.innerHTML = tags && tags.length
             ? '<span class="chip is-auto">有報の配当政策: ' + escapeHtml(tags.join("・")) + '</span>' +
-              (qs || []).map(function (q) { return '<q>' + escapeHtml(q) + '</q>'; }).join("")
+              (qs || []).map(function (q) { return '<q>' + escapeHtml(q.replace(/^[0-9０-９]*【配当政策】/, "")) + '</q>'; }).join("")
             : (a.rec && a.rec.pc ? '<span class="pq-none">有報の配当政策に累進配当・DOEの記載はありません。決算説明資料などで新しく宣言していたら、手でチェックしてください。</span>' : "");
         }
       }
