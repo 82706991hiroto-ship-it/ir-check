@@ -147,6 +147,8 @@
   .price-tools { display: flex; align-items: center; gap: 6px 14px; flex-wrap: wrap; margin-top: 10px; font-size: 12.5px; color: var(--text-2); }
   .price-tools a { color: var(--accent); text-decoration: none; font-weight: 600; }
   .yield-line { flex-basis: 100%; }
+  #pasteBtn.is-waiting { font-weight: 700; animation: pulse 1.2s ease-in-out 3; border-radius: 6px; }
+  @keyframes pulse { 50% { box-shadow: 0 0 0 6px var(--accent-soft); } }
   .yield-line:empty { display: none; }
   .yield-line b { color: var(--text); font-size: 15px; }
   .auto-status { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-top: 12px; font-size: 12.5px; color: var(--text-2); }
@@ -272,7 +274,7 @@
       <label>株価(任意)<input type="text" id="subjPrice" inputmode="decimal" autocomplete="off" placeholder="PBR・利回りに使います"></label>
     </div>
     <div class="price-tools" id="priceTools" hidden>
-      <a id="priceLink" target="_blank" rel="noopener noreferrer">株価を見る(Yahoo!ファイナンス) ↗</a>
+      <a id="priceLink" target="_blank" rel="noopener noreferrer">株価を見てコピー(Yahoo!ファイナンス) ↗</a>
       <button type="button" class="btn-link" id="pasteBtn">📋 コピーした株価を貼り付け</button>
       <span class="yield-line" id="yieldLine"></span>
     </div>
@@ -1307,7 +1309,27 @@
     input.value = v;
     input.dispatchEvent(new Event("input"));
   }
+  // 「株価を見てコピー」から戻ってきたら、コピーした株価を自動で入れる(許可されないときは貼り付けボタンを目立たせる)
+  var priceWaiting = 0;
+  document.getElementById("priceLink").addEventListener("click", function () { priceWaiting = Date.now(); });
+  function onPriceReturn() {
+    if (!priceWaiting || Date.now() - priceWaiting > 15 * 60 * 1000) return;
+    var btn = document.getElementById("pasteBtn");
+    var giveUp = function () { btn.classList.add("is-waiting"); };
+    if (!(navigator.clipboard && navigator.clipboard.readText)) return giveUp();
+    navigator.clipboard.readText().then(function (t) {
+      var p = t && t.length <= 40 ? parsePrice(t) : "";
+      if (!(parseFloat(p) > 0)) return giveUp();
+      priceWaiting = 0; btn.classList.remove("is-waiting");
+      setPrice(p);
+      setStatus("コピーした株価 " + parseFloat(p).toLocaleString("ja-JP") + "円 を入れました。");
+    }, giveUp);
+  }
+  document.addEventListener("visibilitychange", function () { if (!document.hidden) setTimeout(onPriceReturn, 150); });
+  window.addEventListener("pageshow", function (e) { if (e.persisted) setTimeout(onPriceReturn, 150); });
+
   document.getElementById("pasteBtn").addEventListener("click", function () {
+    priceWaiting = 0; this.classList.remove("is-waiting");
     var input = document.getElementById("subjPrice");
     if (navigator.clipboard && navigator.clipboard.readText) {
       navigator.clipboard.readText().then(function (t) {

@@ -117,6 +117,10 @@
   .price-row .yld { flex-basis: 100%; }
   .price-row .yld:empty { display: none; }
   .price-row .yld b { color: var(--text); font-size: 15px; }
+  .price-row.is-waiting button.paste { border-color: var(--accent); color: var(--accent); font-weight: 700; animation: pulse 1.2s ease-in-out 3; }
+  @keyframes pulse { 50% { box-shadow: 0 0 0 6px var(--accent-soft); } }
+  .toast { position: fixed; left: 16px; right: 16px; bottom: 20px; max-width: 520px; margin: 0 auto; background: var(--text); color: var(--card);
+    font-size: 13px; padding: 12px 16px; border-radius: 12px; box-shadow: var(--shadow); z-index: 10; }
   .more { display: block; width: 100%; margin-top: 12px; font: inherit; font-size: 14px; padding: 12px; border-radius: 12px;
     border: 1px solid var(--line); background: var(--card); color: var(--text); cursor: pointer; }
   .empty { color: var(--text-2); font-size: 13px; padding: 12px 0; }
@@ -178,7 +182,8 @@
       「DOE」「株主資本配当率」「純資産配当率」などがあれば<b>DOE</b>としています。「DOEも踏まえて判断」のような軽い書き方も含むので、根拠の文で確かめてください。</p>
     <p><span class="note-label">反映の時期</span>有報は年1回、決算から約3か月後に出ます。決算短信や中期経営計画で新しく宣言した会社は、次の有報が出るまでここに載りません。
       数字は毎月、新しく提出された有報で更新しています(<span id="built"></span>)。</p>
-    <p><span class="note-label">株価</span>株価はこのページでは配っていません。「株価を見る」で開いた画面などでご自身で確かめて入れてください。
+    <p><span class="note-label">株価</span>株価はこのページでは配っていません。「株価を見てコピー」で開いた画面で株価をコピーしてこの画面に戻ると、自動で入ります
+      (ブラウザが許可しないときは、その銘柄の「貼り付け」が光るので押してください)。
       入れた株価はこの端末のブラウザにだけ保存され、チェックシートでも使えます。利回りは前期の実績配当で計算しています(会社予想ではありません)。</p>
     <p><span class="note-label">出典</span><a href="https://disclosure2.edinet-fsa.go.jp/" target="_blank" rel="noopener noreferrer">EDINET</a>の有価証券報告書をもとに当サイトが加工して作成しています
       (<a href="https://www.digital.go.jp/resources/open_data/public_data_license_v1.0" target="_blank" rel="noopener noreferrer">公共データ利用規約 第1.0版</a>)。
@@ -269,7 +274,7 @@
       '<div class="price-row" data-code="' + esc(r.c) + '">' +
         '<input type="text" inputmode="decimal" autocomplete="off" placeholder="株価" aria-label="株価" value="' + (prices[r.c] ? prices[r.c].p : "") + '">' +
         '<button type="button" class="paste">📋 貼り付け</button>' +
-        '<a href="https://finance.yahoo.co.jp/quote/' + encodeURIComponent(r.c) + '.T" target="_blank" rel="noopener noreferrer">株価を見る ↗</a>' +
+        '<a href="https://finance.yahoo.co.jp/quote/' + encodeURIComponent(r.c) + '.T" target="_blank" rel="noopener noreferrer">株価を見てコピー ↗</a>' +
         '<span class="yld">' + yieldText(r) + '</span></div>' +
       '<div class="co-actions"><a href="./?code=' + encodeURIComponent(r.c) + '">10項目でチェックする ›</a>' +
       '<a class="sub" href="https://irbank.net/' + encodeURIComponent(r.c) + '/dividend" target="_blank" rel="noopener noreferrer">配当の推移(IR BANK)</a></div>';
@@ -317,13 +322,48 @@
     storePrice(row.dataset.code, p);
     row.querySelector(".yld").innerHTML = yieldText(byCode(row.dataset.code));
   });
+  // 「株価を見る」を押した銘柄を覚えておき、この画面に戻ってきたらコピーした株価を自動で入れる。
+  // ブラウザが許可しないとき(iPhoneなど)は、その銘柄の「貼り付け」を目立たせる
+  var WAIT_KEY = "irPriceWaiting";
+  function toast(msg) {
+    var t = document.createElement("div"); t.className = "toast"; t.textContent = msg;
+    document.body.appendChild(t); setTimeout(function () { t.remove(); }, 3500);
+  }
+  function waiting() {
+    try { var w = JSON.parse(sessionStorage.getItem(WAIT_KEY) || "null"); return w && Date.now() - w.t < 15 * 60 * 1000 ? w : null; } catch (e) { return null; }
+  }
+  function rowOf(code) { return document.querySelector('.price-row[data-code="' + code + '"]'); }
+  function onReturn() {
+    var w = waiting(), row = w && rowOf(w.code);
+    if (!row) return;
+    var giveUp = function () { row.classList.add("is-waiting"); row.scrollIntoView({ block: "center", behavior: "smooth" }); };
+    if (!(navigator.clipboard && navigator.clipboard.readText)) return giveUp();
+    navigator.clipboard.readText().then(function (t) {
+      var p = t && t.length <= 40 ? parsePrice(t) : 0;
+      if (!(p > 0 && p < 10000000)) return giveUp();
+      applyPrice(row, String(p));
+      row.classList.remove("is-waiting");
+      try { sessionStorage.removeItem(WAIT_KEY); } catch (e) {}
+      row.scrollIntoView({ block: "center", behavior: "smooth" });
+      toast(w.code + " の株価 " + p.toLocaleString("ja-JP") + "円 を入れました");
+    }, giveUp);
+  }
+  document.addEventListener("visibilitychange", function () { if (!document.hidden) setTimeout(onReturn, 150); });
+  window.addEventListener("pageshow", function (e) { if (e.persisted) setTimeout(onReturn, 150); });
+
   $("list").addEventListener("click", function (e) {
+    var look = e.target.closest(".price-row a");
+    if (look) {
+      try { sessionStorage.setItem(WAIT_KEY, JSON.stringify({ code: look.closest(".price-row").dataset.code, t: Date.now() })); } catch (x) {}
+      return;
+    }
     var btn = e.target.closest("button.paste");
     if (!btn) return;
     var row = btn.closest(".price-row"), input = row.querySelector("input");
     if (navigator.clipboard && navigator.clipboard.readText) {
       navigator.clipboard.readText().then(function (t) {
-        if (parsePrice(t)) applyPrice(row, t); else input.focus();
+        if (parsePrice(t)) { applyPrice(row, t); row.classList.remove("is-waiting"); try { sessionStorage.removeItem(WAIT_KEY); } catch (x) {} }
+        else input.focus();
       }, function () { input.focus(); });
     } else input.focus();
   });
