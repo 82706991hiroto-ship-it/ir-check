@@ -57,7 +57,13 @@ def policy(text):
             if p.search(sent):
                 if tag not in tags:
                     tags.append(tag)
-                q = sent if len(sent) <= 140 else sent[:139] + "…"
+                # 長い文は、見つけた語の前後だけを切り出す
+                m = p.search(sent)
+                if len(sent) <= 140:
+                    q = sent
+                else:
+                    a = max(0, m.start() - 50)
+                    q = ("…" if a > 0 else "") + sent[a:a + 130] + ("…" if a + 130 < len(sent) else "")
                 if q not in quotes:
                     quotes.append(q)
     return tags, quotes[:2]
