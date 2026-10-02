@@ -164,6 +164,15 @@
         <option value="3">3期以上</option>
         <option value="4">4期(5期の記録すべて)</option>
       </select></label>
+      <label>配当利回り<select id="yl">
+        <option value="0">指定なし</option>
+        <option value="3">3%以上</option>
+        <option value="3.5">3.5%以上</option>
+        <option value="4">4%以上</option>
+        <option value="4.5">4.5%以上</option>
+        <option value="5">5%以上</option>
+        <option value="entered">株価を入れた会社すべて</option>
+      </select></label>
       <label>並べ方<select id="sort">
         <option value="code">コード順</option>
         <option value="up">連続増配が長い順</option>
@@ -233,7 +242,7 @@
   }
 
   function filtered() {
-    var q = nfkc($("q").value.trim()), sec = $("sec").value, po = $("po").value, up = +$("up").value;
+    var q = nfkc($("q").value.trim()), sec = $("sec").value, po = $("po").value, up = +$("up").value, yl = $("yl").value;
     var out = rows.filter(function (r) {
       if (pol === "both" ? r.p.length < 2 : pol && r.p.indexOf(pol) === -1) return false;
       if (sec && r.s !== sec) return false;
@@ -241,6 +250,8 @@
       if (po === "mid" && !(r.po != null && r.po >= 30 && r.po <= 50)) return false;
       if (po === "high" && !(r.po != null && r.po > 50)) return false;
       if (r.up < up) return false;
+      // 利回りは各自が入れた株価で計算するので、株価を入れた会社だけが対象
+      if (yl !== "0" && (yieldOf(r) == null || (yl !== "entered" && yieldOf(r) < +yl))) return false;
       if (q && nfkc(r.c).indexOf(q) !== 0 && nfkc(r.n).indexOf(q) === -1) return false;
       return true;
     });
@@ -283,8 +294,10 @@
 
   function render() {
     var list = filtered();
+    var entered = rows.filter(function (r) { return yieldOf(r) != null; }).length;
     $("count").innerHTML = "<strong>" + list.length.toLocaleString("ja-JP") + "</strong> 社" +
-      (list.length !== rows.length ? "(全" + rows.length + "社中)" : "");
+      (list.length !== rows.length ? "(全" + rows.length + "社中)" : "") +
+      ($("yl").value !== "0" ? "<br><small>配当利回りは株価を入れた" + entered + "社の中から探しています。気になる会社の株価を入れると対象になります。</small>" : "");
     var ul = $("list");
     ul.innerHTML = "";
     if (!list.length) { ul.innerHTML = '<li class="empty">条件に合う会社はありません。</li>'; }
@@ -301,7 +314,7 @@
       reset();
     });
   });
-  ["q", "sec", "po", "up", "sort"].forEach(function (id) { $(id).addEventListener(id === "q" ? "input" : "change", reset); });
+  ["q", "sec", "po", "up", "yl", "sort"].forEach(function (id) { $(id).addEventListener(id === "q" ? "input" : "change", reset); });
   $("more").addEventListener("click", function () { shown += PAGE; render(); });
 
   function byCode(c) { return rows.filter(function (r) { return r.c === c; })[0]; }
