@@ -1298,8 +1298,9 @@
     var price = parseFloat(state.subject.price);
     if (div > 0 && price > 0) {
       var saved = loadPrices()[code];
-      line.innerHTML = "実績配当利回り <b>" + (div / price * 100).toFixed(2) + "%</b>(1株配当 " + div + "円 ÷ 株価 " +
-        price.toLocaleString("ja-JP") + "円" + (saved && saved.d ? "・" + saved.d.slice(5).replace("-", "/") + "に入力" : "") + ")";
+      line.innerHTML = "実績配当利回り <b>" + (div / price * 100).toFixed(2) + "%</b>(前期の1株配当 " + div + "円 ÷ 株価 " +
+        price.toLocaleString("ja-JP") + "円" + (saved && saved.d ? "・" + saved.d.slice(5).replace("-", "/") + "に入力" : "") + ")" +
+        '<br><small>会社予想ではなく前期の実績で計算しています(株式分割は今の株数に割り戻し済み)。予想配当で計算する他のサイトとは少し違うことがあります。</small>';
     } else {
       line.textContent = div > 0 ? "株価を入れると、実績配当利回りが出ます。" : "";
     }
