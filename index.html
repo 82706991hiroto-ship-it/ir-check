@@ -144,6 +144,11 @@
   .sector-note .sn-why { color: var(--text-2); margin-top: 4px; }
   .sector-note.is-current { background: #fffaf0; margin: 0 -12px; padding: 12px; border-radius: 10px; border-top-color: transparent; }
   .sector-note.is-current .sn-now { font-size: 11px; color: #9a5b00; font-weight: 700; }
+  .price-tools { display: flex; align-items: center; gap: 6px 14px; flex-wrap: wrap; margin-top: 10px; font-size: 12.5px; color: var(--text-2); }
+  .price-tools a { color: var(--accent); text-decoration: none; font-weight: 600; }
+  .yield-line { flex-basis: 100%; }
+  .yield-line:empty { display: none; }
+  .yield-line b { color: var(--text); font-size: 15px; }
   .auto-status { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-top: 12px; font-size: 12.5px; color: var(--text-2); }
   .btn-link { font-family: inherit; font-size: 12px; background: none; border: none; padding: 0; color: var(--accent); cursor: pointer; text-decoration: underline; }
   .source-note { margin: 0 0 12px; line-height: 1.85; }
@@ -264,7 +269,12 @@
     <div class="subject">
       <label>証券コード<input type="text" id="subjCode" inputmode="numeric" placeholder="8306"></label>
       <label>銘柄名<input type="text" id="subjName" placeholder="三菱UFJ"></label>
-      <label>株価(任意)<input type="number" id="subjPrice" inputmode="decimal" step="any" min="0" placeholder="PBRの計算に使います"></label>
+      <label>株価(任意)<input type="text" id="subjPrice" inputmode="decimal" autocomplete="off" placeholder="PBR・利回りに使います"></label>
+    </div>
+    <div class="price-tools" id="priceTools" hidden>
+      <a id="priceLink" target="_blank" rel="noopener noreferrer">株価を見る(Yahoo!ファイナンス) ↗</a>
+      <button type="button" class="btn-link" id="pasteBtn">📋 コピーした株価を貼り付け</button>
+      <span class="yield-line" id="yieldLine"></span>
     </div>
     <div class="auto-status" id="autoStatus" hidden>
       <span id="autoStatusText"></span>
@@ -1261,6 +1271,56 @@
     });
   }
 
+  // 株価は各自が証券会社やYahoo!ファイナンスで見て入れる。入れた値はこの端末にだけ、銘柄ごとに残す
+  // (累進配当・DOEの一覧ページと共有)
+  var PRICE_KEY = "irPrices";
+  function parsePrice(t) {
+    var m = String(t || "").normalize("NFKC").replace(/[,\s円]/g, "").match(/\d+(\.\d+)?/);
+    return m ? m[0] : "";
+  }
+  function loadPrices() { try { return JSON.parse(localStorage.getItem(PRICE_KEY) || "{}"); } catch (e) { return {}; } }
+  function storePrice(code, p) {
+    if (!code) return;
+    var all = loadPrices();
+    if (p > 0) all[code] = { p: +p, d: todayStamp() }; else delete all[code];
+    try { localStorage.setItem(PRICE_KEY, JSON.stringify(all)); } catch (e) {}
+  }
+  function curCode() { return (state.subject.code || "").trim().toUpperCase(); }
+  function renderPriceTools() {
+    var code = curCode(), ok = /^[0-9][0-9A-Z]{3}$/.test(code);
+    document.getElementById("priceTools").hidden = !ok;
+    if (!ok) return;
+    document.getElementById("priceLink").href = "https://finance.yahoo.co.jp/quote/" + encodeURIComponent(code) + ".T";
+    var line = document.getElementById("yieldLine");
+    var a = state.auto, div = a && a.rec && a.code === code && a.rec.div ? a.rec.div[a.rec.div.length - 1] : null;
+    var price = parseFloat(state.subject.price);
+    if (div > 0 && price > 0) {
+      var saved = loadPrices()[code];
+      line.innerHTML = "実績配当利回り <b>" + (div / price * 100).toFixed(2) + "%</b>(1株配当 " + div + "円 ÷ 株価 " +
+        price.toLocaleString("ja-JP") + "円" + (saved && saved.d ? "・" + saved.d.slice(5).replace("-", "/") + "に入力" : "") + ")";
+    } else {
+      line.textContent = div > 0 ? "株価を入れると、実績配当利回りが出ます。" : "";
+    }
+  }
+  function setPrice(v) {
+    var input = document.getElementById("subjPrice");
+    input.value = v;
+    input.dispatchEvent(new Event("input"));
+  }
+  document.getElementById("pasteBtn").addEventListener("click", function () {
+    var input = document.getElementById("subjPrice");
+    if (navigator.clipboard && navigator.clipboard.readText) {
+      navigator.clipboard.readText().then(function (t) {
+        var p = parsePrice(t);
+        if (p) setPrice(p); else { input.focus(); setStatus("コピーした内容に株価が見つかりませんでした。"); }
+      }, function () { input.focus(); setStatus("株価の欄を長押しして貼り付けてください。"); });
+    } else { input.focus(); }
+  });
+  document.getElementById("subjPrice").addEventListener("change", function (e) {
+    var p = parsePrice(e.target.value);
+    if (p !== e.target.value) setPrice(p);
+  });
+
   var codeTimer = null;
   document.getElementById("subjCode").addEventListener("input", function (e) {
     clearTimeout(codeTimer);
@@ -1268,6 +1328,8 @@
     if (!/^[0-9][0-9A-Z]{3}$/.test(code)) { setAutoStatus("", false); return; }
     codeTimer = setTimeout(function () {
       if (state.auto && state.auto.code === code) return;
+      var known = loadPrices()[code];
+      state.subject.price = known ? String(known.p) : "";
       setAutoStatus("有価証券報告書のデータを読み込んでいます…", false);
       applyAuto(code, true);
     }, 300);
@@ -1282,15 +1344,18 @@
   });
 
   document.getElementById("subjPrice").addEventListener("input", function (e) {
-    state.subject.price = e.target.value;
+    var raw = parsePrice(e.target.value);
+    state.subject.price = raw;
+    storePrice(curCode(), parseFloat(raw));
+    renderPriceTools();
     var a = state.auto;
     if (a && a.ev && a.ev.pbr) {
-      var pbr = pbrFrom(e.target.value, a.ev.pbr.bps);
+      var pbr = pbrFrom(raw, a.ev.pbr.bps);
       var wasAuto = a.values.pbr !== undefined && String(state.values.pbr) === String(a.values.pbr);
       a.ev.pbr.value = pbr;
       a.ev.pbr.edge = !!pbr && [0.5, 1, 1.5].some(function (t) { return Math.abs(parseFloat(pbr) - t) <= 0.05; });
       a.ev.pbr.reason = pbr
-        ? "株価 " + e.target.value + "円 ÷ 1株純資産 " + a.ev.pbr.bps.toLocaleString("ja-JP") + "円"
+        ? "株価 " + raw + "円 ÷ 1株純資産 " + a.ev.pbr.bps.toLocaleString("ja-JP") + "円"
         : "1株純資産 " + a.ev.pbr.bps.toLocaleString("ja-JP") + "円。株価を入れるとPBRが出ます";
       // 手でPBRを入れていたら上書きしない
       if (wasAuto || state.values.pbr === undefined) {
@@ -1307,6 +1372,7 @@
     document.getElementById("subjCode").value = state.subject.code || "";
     document.getElementById("subjName").value = state.subject.name || "";
     document.getElementById("subjPrice").value = state.subject.price || "";
+    renderPriceTools();
   }
 
   ["subjCode", "subjName"].forEach(function (id) {
@@ -1329,6 +1395,8 @@
     if (!/^[0-9][0-9A-Z]{3}$/.test(code)) return;
     try { history.replaceState(null, "", location.pathname); } catch (e) {}
     var price = parseFloat(q.get("price"));
+    if (!(price > 0)) { var kp = loadPrices()[code]; if (kp) price = kp.p; }
+    else storePrice(code, price);
     var last = state.saved.filter(function (x) { return (x.code || "").trim().toUpperCase() === code; }).pop();
     if (last) {
       state.subject = { code: code, name: last.name || "", price: price > 0 ? String(price) : "" };

@@ -108,6 +108,15 @@
   .co-actions { display: flex; flex-wrap: wrap; gap: 8px 14px; margin-top: 10px; font-size: 12.5px; }
   .co-actions a { text-decoration: none; font-weight: 600; }
   .co-actions a.sub { color: var(--text-2); font-weight: 500; }
+  .price-row { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 10px; margin-top: 10px; font-size: 12.5px; color: var(--text-2); }
+  .price-row input { width: 7.5em; font: inherit; font-size: 15px; padding: 7px 10px; border: 1px solid transparent; border-radius: 9px;
+    background: var(--field); color: var(--text); font-variant-numeric: tabular-nums; }
+  .price-row button { font: inherit; font-size: 12.5px; border: 1px solid var(--line); background: var(--card); color: var(--text-2);
+    border-radius: 999px; padding: 6px 10px; cursor: pointer; }
+  .price-row a { text-decoration: none; font-weight: 600; }
+  .price-row .yld { flex-basis: 100%; }
+  .price-row .yld:empty { display: none; }
+  .price-row .yld b { color: var(--text); font-size: 15px; }
   .more { display: block; width: 100%; margin-top: 12px; font: inherit; font-size: 14px; padding: 12px; border-radius: 12px;
     border: 1px solid var(--line); background: var(--card); color: var(--text); cursor: pointer; }
   .empty { color: var(--text-2); font-size: 13px; padding: 12px 0; }
@@ -156,6 +165,7 @@
         <option value="up">連続増配が長い順</option>
         <option value="po">配当性向が低い順</option>
         <option value="growth">5期の増配率が高い順</option>
+        <option value="yield">利回りが高い順(株価を入れた会社)</option>
       </select></label>
     </div>
     <p class="count" id="count">読み込んでいます…</p>
@@ -168,6 +178,8 @@
       「DOE」「株主資本配当率」「純資産配当率」などがあれば<b>DOE</b>としています。「DOEも踏まえて判断」のような軽い書き方も含むので、根拠の文で確かめてください。</p>
     <p><span class="note-label">反映の時期</span>有報は年1回、決算から約3か月後に出ます。決算短信や中期経営計画で新しく宣言した会社は、次の有報が出るまでここに載りません。
       数字は毎月、新しく提出された有報で更新しています(<span id="built"></span>)。</p>
+    <p><span class="note-label">株価</span>株価はこのページでは配っていません。「株価を見る」で開いた画面などでご自身で確かめて入れてください。
+      入れた株価はこの端末のブラウザにだけ保存され、チェックシートでも使えます。利回りは前期の実績配当で計算しています(会社予想ではありません)。</p>
     <p><span class="note-label">出典</span><a href="https://disclosure2.edinet-fsa.go.jp/" target="_blank" rel="noopener noreferrer">EDINET</a>の有価証券報告書をもとに当サイトが加工して作成しています
       (<a href="https://www.digital.go.jp/resources/open_data/public_data_license_v1.0" target="_blank" rel="noopener noreferrer">公共データ利用規約 第1.0版</a>)。
       1株配当は株式分割を割り戻しています。特定の銘柄の売買を勧めるものではありません。投資判断は自己責任で行ってください。</p>
@@ -178,6 +190,28 @@
 (function () {
   "use strict";
   var PAGE = 50;
+  // 株価は各自が見て入れる。この端末にだけ銘柄ごとに残し、チェックシートと共有する
+  var PRICE_KEY = "irPrices";
+  function loadPrices() { try { return JSON.parse(localStorage.getItem(PRICE_KEY) || "{}"); } catch (e) { return {}; } }
+  var prices = loadPrices();
+  function today() { var d = new Date(); return d.getFullYear() + "-" + ("0" + (d.getMonth() + 1)).slice(-2) + "-" + ("0" + d.getDate()).slice(-2); }
+  function storePrice(code, p) {
+    prices = loadPrices();
+    if (p > 0) prices[code] = { p: p, d: today() }; else delete prices[code];
+    try { localStorage.setItem(PRICE_KEY, JSON.stringify(prices)); } catch (e) {}
+  }
+  function parsePrice(t) {
+    var m = String(t || "").normalize("NFKC").replace(/[,\s円]/g, "").match(/\d+(\.\d+)?/);
+    return m ? +m[0] : 0;
+  }
+  function yieldOf(r) {
+    var pr = prices[r.c], d = r.d && r.d[r.d.length - 1];
+    return pr && pr.p > 0 && d > 0 ? d / pr.p * 100 : null;
+  }
+  function yieldText(r) {
+    var y = yieldOf(r), pr = prices[r.c];
+    return y == null ? "" : '実績配当利回り <b>' + y.toFixed(2) + '%</b>(' + pr.d.slice(5).replace("-", "/") + 'に入れた株価 ' + pr.p.toLocaleString("ja-JP") + '円)';
+  }
   var rows = [], shown = PAGE, pol = "";
   var $ = function (id) { return document.getElementById(id); };
 
@@ -208,6 +242,7 @@
     var key = $("sort").value;
     if (key === "up") out.sort(function (a, b) { return b.up - a.up || a.c.localeCompare(b.c); });
     if (key === "po") out.sort(function (a, b) { return (a.po == null ? 999 : a.po) - (b.po == null ? 999 : b.po); });
+    if (key === "yield") out.sort(function (a, b) { return (yieldOf(b) == null ? -1 : yieldOf(b)) - (yieldOf(a) == null ? -1 : yieldOf(a)); });
     if (key === "growth") out.sort(function (a, b) { return (growth(b) == null ? -9 : growth(b)) - (growth(a) == null ? -9 : growth(a)); });
     return out;
   }
@@ -231,6 +266,11 @@
       '</div>' +
       (r.q && r.q.length ? '<details class="quote"><summary>有報の配当政策(根拠の文)</summary>' +
         r.q.map(function (t) { return '<q>' + esc(t.replace(/^[0-9０-９]*【配当政策】/, "")) + '</q>'; }).join("") + '</details>' : '') +
+      '<div class="price-row" data-code="' + esc(r.c) + '">' +
+        '<input type="text" inputmode="decimal" autocomplete="off" placeholder="株価" aria-label="株価" value="' + (prices[r.c] ? prices[r.c].p : "") + '">' +
+        '<button type="button" class="paste">📋 貼り付け</button>' +
+        '<a href="https://finance.yahoo.co.jp/quote/' + encodeURIComponent(r.c) + '.T" target="_blank" rel="noopener noreferrer">株価を見る ↗</a>' +
+        '<span class="yld">' + yieldText(r) + '</span></div>' +
       '<div class="co-actions"><a href="./?code=' + encodeURIComponent(r.c) + '">10項目でチェックする ›</a>' +
       '<a class="sub" href="https://irbank.net/' + encodeURIComponent(r.c) + '/dividend" target="_blank" rel="noopener noreferrer">配当の推移(IR BANK)</a></div>';
     return li;
@@ -258,6 +298,35 @@
   });
   ["q", "sec", "po", "up", "sort"].forEach(function (id) { $(id).addEventListener(id === "q" ? "input" : "change", reset); });
   $("more").addEventListener("click", function () { shown += PAGE; render(); });
+
+  function byCode(c) { return rows.filter(function (r) { return r.c === c; })[0]; }
+  function applyPrice(row, value) {
+    var code = row.dataset.code, p = parsePrice(value), input = row.querySelector("input");
+    storePrice(code, p);
+    if (input.value !== (p ? String(p) : "")) input.value = p ? p : "";
+    row.querySelector(".yld").innerHTML = yieldText(byCode(code));
+  }
+  $("list").addEventListener("change", function (e) {
+    var row = e.target.closest(".price-row");
+    if (row && e.target.tagName === "INPUT") applyPrice(row, e.target.value);
+  });
+  $("list").addEventListener("input", function (e) {
+    var row = e.target.closest(".price-row");
+    if (!row || e.target.tagName !== "INPUT") return;
+    var p = parsePrice(e.target.value);
+    storePrice(row.dataset.code, p);
+    row.querySelector(".yld").innerHTML = yieldText(byCode(row.dataset.code));
+  });
+  $("list").addEventListener("click", function (e) {
+    var btn = e.target.closest("button.paste");
+    if (!btn) return;
+    var row = btn.closest(".price-row"), input = row.querySelector("input");
+    if (navigator.clipboard && navigator.clipboard.readText) {
+      navigator.clipboard.readText().then(function (t) {
+        if (parsePrice(t)) applyPrice(row, t); else input.focus();
+      }, function () { input.focus(); });
+    } else input.focus();
+  });
 
   fetch("policy.json").then(function (r) { return r.json(); }).then(function (data) {
     rows = data.rows || [];
