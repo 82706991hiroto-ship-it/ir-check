@@ -118,6 +118,10 @@
     margin-left: 6px; font-size: 10.5px; font-weight: 700; color: var(--accent);
     background: var(--accent-soft); border-radius: 999px; padding: 2px 8px; vertical-align: 2px;
   }
+  .rule-now { display: block; margin-top: 2px; color: var(--accent); font-weight: 600; }
+  .rule-more { font-size: 11.5px; color: var(--muted); margin-top: 2px; }
+  .rule-more summary { cursor: pointer; width: fit-content; }
+  .rule-more ul { margin: 4px 0 0; padding-left: 1.2em; line-height: 1.8; color: var(--text-2); }
   .item-rule { font-size: 12px; color: var(--text-2); line-height: 1.8; margin-top: 6px; }
   /* 自動採点の根拠: 5期の推移の小さな折れ線と、判定の理由 */
   .item-evidence { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-top: 8px; font-size: 12px; color: var(--text-2); }
@@ -406,6 +410,7 @@
     {
       key: "opm", name: "営業利益率", star: true,
       rule: "10%以上 → ◎ / 5%以下 → ❌",
+      more: ["卸売業・小売業は ◎5%以上 / ❌2%以下(薄利多売の業種のため)", "銀行・保険などは判定しない"],
       field: numberItem("%", function (n, sector) {
         if (LOW_MARGIN_SECTORS.indexOf(sector) !== -1) {
           if (n >= 5) return { level: GOOD, note: "業種の目安" };
@@ -420,6 +425,7 @@
     {
       key: "equity", name: "自己資本比率", star: true,
       rule: "60%以上 → ◎ / 40%以上 → ○ / 10%以下 → ❌",
+      more: ["銀行・保険などは判定しない(預金を預かるので負債が大きいのが普通)"],
       field: numberItem("%", function (n) {
         if (n >= 60) return { level: GOOD };
         if (n >= 40) return { level: OK };
@@ -430,6 +436,7 @@
     {
       key: "cf", name: "営業活動によるCF", star: false,
       rule: "毎年黒字 → ◎ / 長期で増加傾向 → ◎ / 10年で1回でも赤字 → ❌",
+      more: ["建設業は5期の合計が黒字かで判定(工事代金の入金時期で年ごとに振れるため)", "不動産業・銀行・保険などは判定しない"],
       field: selectItem([
         { value: "growing", label: "毎年黒字で増加傾向", level: GOOD },
         { value: "positive", label: "毎年黒字", level: GOOD },
@@ -438,7 +445,8 @@
     },
     {
       key: "cash", name: "現金等", star: false,
-      rule: "長期的に増えているのが良い。5期で30%以上減っていて、営業CFの5期合計も赤字 → ❌",
+      rule: "長期的に増えているのが良い。",
+      more: ["5期で30%以上減り、営業CFの5期合計も赤字なら ❌(本業で稼げず現金を食いつぶしている)"],
       field: selectItem([
         { value: "up", label: "長期的に増加", level: GOOD },
         { value: "flat", label: "横ばい", level: OK },
@@ -449,6 +457,7 @@
     {
       key: "dividend", name: "1株あたり配当金", star: true,
       rule: "安定性(減配・無配がないか)と成長性(連続増配か)。",
+      more: ["突出した年の翌年に元へ戻っただけの減配は、❌のまま「記念配当かも」と知らせる"],
       field: selectItem([
         { value: "growing", label: "連続増配", level: GOOD },
         { value: "stable", label: "安定(減配なし)", level: OK },
@@ -457,7 +466,8 @@
     },
     {
       key: "payout", name: "配当性向", star: false,
-      rule: "30〜50% → ◎ / 70〜80%超 → ❌ / 30%以下は高配当株には向かない(累進配当・DOEの会社は増配余力とみて ◎)。当期だけ70%超で5期通算が50%以下なら △(ここから悪化していないか要確認)",
+      rule: "30〜50% → ◎ / 70%超 → ❌ / 30%未満 → △",
+      more: ["累進配当・DOEの会社は、30%未満でも増配余力とみて ◎", "当期だけ70%超で、5期通算が50%以下なら △(ここから悪化していないか確認)"],
       field: numberItem("%", function (n, sector, policy) {
         if (n >= 30 && n <= 50) return { level: GOOD };
         if (n > 70) return { level: BAD, note: "高すぎる" };
@@ -800,6 +810,13 @@
       rule.className = "item-rule";
       rule.textContent = item.rule;
       row.appendChild(rule);
+      if (item.more) {
+        var more = document.createElement("details");
+        more.className = "rule-more";
+        more.innerHTML = "<summary>例外・細かいルール</summary><ul>" +
+          item.more.map(function (t) { return "<li>" + escapeHtml(t) + "</li>"; }).join("") + "</ul>";
+        row.appendChild(more);
+      }
 
       var evidence = document.createElement("div");
       evidence.className = "item-evidence";
@@ -910,7 +927,12 @@
       if (e.edge) html += '<span class="chip is-edge">境目</span>';
       var sn = sectorNote(a.rec && a.rec.sec, item.key);
       var ruleEl = cell.parentNode.querySelector(".item-rule");
-      if (ruleEl && sn) ruleEl.textContent = item.rule + "(" + sn.label + "は " + sn.how + ")";
+      if (ruleEl && sn) {
+        var now = document.createElement("span");
+        now.className = "rule-now";
+        now.textContent = "この銘柄(" + a.rec.sec + ")は " + sn.how;
+        ruleEl.appendChild(now);
+      }
       if (item.key === "dividend" && e.spike) html += '<a class="chip is-edge" target="_blank" rel="noopener noreferrer" href="https://irbank.net/' +
         encodeURIComponent(a.code) + '/dividend">記念配当かも・IR BANKで確認</a>';
       if (item.key === "payout" && e.avg != null && parseFloat(e.value) > 70 && e.avg <= 50) html += '<span class="chip is-edge">当期だけ基準超え・ここから悪化していないか確認</span>';
