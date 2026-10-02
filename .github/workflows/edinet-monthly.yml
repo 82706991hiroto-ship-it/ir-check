@@ -27,6 +27,13 @@ jobs:
         env:
           EDINET_API_KEY: ${{ secrets.EDINET_API_KEY }}
         run: python3 tools/edinet_fin.py update --days "${{ inputs.days || '45' }}"
+      # HAITO(haito-dashboard)の最大14期の1株配当を、1株配当の長期判定に使う
+      - uses: actions/checkout@v4
+        with:
+          repository: 82706991hiroto-ship-it/haito-dashboard
+          path: haito
+      - name: 長期の1株配当を付ける
+        run: python3 tools/edinet_fin.py longdiv --haito haito/index.html
       - name: 変わっていればコミットして公開
         env:
           GH_TOKEN: ${{ github.token }}

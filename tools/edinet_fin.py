@@ -327,6 +327,47 @@ def save_fin(fin):
             json.dump(dict(sorted(m.items())), f, ensure_ascii=False, separators=(",", ":"))
 
 
+def close(a, b):
+    return abs(a - b) <= max(0.02 * abs(b), 0.011)
+
+
+def attach_long(fin, haito_html):
+    """HAITO(haito-dashboard)の内蔵データにある最大14期の1株配当を、fin の dl(古い順)に付ける。
+
+    HAITO の最新期が fin と同じならそのまま、1期遅れていれば fin の当期を足す。合わなければ付けない。
+    """
+    html = open(haito_html, encoding="utf-8").read()
+    info = json.loads(re.search(r"var CODE_INFO_MAP = (\{.*?\});\n", html).group(1))
+    n = 0
+    for m in fin.values():
+        for code, r in m.items():
+            r.pop("dl", None)
+            d, v = r.get("div"), info.get(code)
+            if not d or not v or len(v) < 4 or not v[3]:
+                continue
+            long = list(reversed(v[3]))
+            if close(long[-1], d[-1]):
+                pass
+            elif len(d) >= 2 and close(long[-1], d[-2]):
+                long = long + [d[-1]]
+            else:
+                continue
+            if len(long) > len(d):
+                r["dl"] = [round(x, 2) for x in long]
+                n += 1
+    return n
+
+
+def streak_of(s):
+    up = 0
+    for k in range(len(s) - 1, 0, -1):
+        if s[k] > s[k - 1]:
+            up += 1
+        else:
+            break
+    return up
+
+
 def write_policy(fin):
     """累進配当・DOEの会社の一覧(policy.json)。一覧ページが読む小さなデータ"""
     rows = []
@@ -335,12 +376,7 @@ def write_policy(fin):
             if not r.get("pol"):
                 continue
             d, e = r.get("div") or [], r.get("eps") or []
-            up = 0
-            for k in range(len(d) - 1, 0, -1):
-                if d[k] > d[k - 1]:
-                    up += 1
-                else:
-                    break
+            up = streak_of(r.get("dl") or d)
             rows.append({
                 "c": code, "n": r.get("n", ""), "s": r.get("sec", ""), "p": r["pol"], "fy": (r.get("fy") or "")[:7],
                 "d": d, "po": round(d[-1] / e[-1] * 100, 1) if d and e and e[-1] > 0 else None,
@@ -399,6 +435,8 @@ def main():
     ap = argparse.ArgumentParser()
     sub = ap.add_subparsers(dest="cmd", required=True)
     sub.add_parser("policy")
+    lg = sub.add_parser("longdiv")
+    lg.add_argument("--haito", required=True, help="haito-dashboard の index.html")
     u = sub.add_parser("update")
     u.add_argument("--days", type=int, default=45)
     d = sub.add_parser("doc")
@@ -408,6 +446,11 @@ def main():
         cmd_update(a.days)
     elif a.cmd == "policy":
         print(write_policy(load_fin()))
+    elif a.cmd == "longdiv":
+        fin = load_fin()
+        print("長期の1株配当を付けた会社", attach_long(fin, a.haito))
+        save_fin(fin)
+        print("累進配当・DOEの会社", write_policy(fin))
     else:
         print(json.dumps(record(download(a.doc_id), "", ""), ensure_ascii=False))
 

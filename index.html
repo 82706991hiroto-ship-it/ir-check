@@ -375,7 +375,9 @@
         <option value="0">指定なし</option>
         <option value="2">2期以上</option>
         <option value="3">3期以上</option>
-        <option value="4">4期(5期の記録すべて)</option>
+        <option value="4">4期以上</option>
+        <option value="5">5期以上</option>
+        <option value="10">10期以上</option>
       </select></label>
       <label>並べ方<select id="sort">
         <option value="code">コード順</option>
@@ -588,11 +590,14 @@
     },
     {
       key: "dividend", name: "1株あたり配当金", star: true,
-      rule: "安定性(減配・無配がないか)と成長性(連続増配か)。",
-      more: ["突出した年の翌年に元へ戻っただけの減配は、❌のまま「記念配当かも」と知らせる"],
+      rule: "長期(最大14期)で大きな減配がないかと、連続増配か。",
+      more: ["◎ 大きな減配がなく、直近5期は毎年増配 / ○ 大きな減配なし / △ 大きな減配が1回だけで、その後に減配前の水準を超えた / ❌ それ以外の減配・無配",
+             "前年から20%以内の下げと、記念配当の反動(突出した年の翌年に元へ戻っただけ)は減配に数えない。上場企業の約1,800社で、20%以内の下げはその後の回復・再減配の割合がほぼ同じで、20%を超えると悪化していたため",
+             "長期の記録がない会社は、直近5期で同じように判定"],
       field: selectItem([
         { value: "growing", label: "連続増配", level: GOOD },
-        { value: "stable", label: "安定(減配なし)", level: OK },
+        { value: "stable", label: "安定(大きな減配なし)", level: OK },
+        { value: "recovered", label: "減配1回・回復済み", level: MID },
         { value: "cut", label: "減配・無配がある", level: BAD }
       ])
     },
@@ -748,24 +753,34 @@
     return { value: value, reason: reason, edge: edge };
   }
 
+  // 1株配当(古い順・最大14期)。前年から20%以内の下げと、記念配当の反動(突出した年の翌年に元の水準へ戻っただけ)は
+  // 減配に数えない。それを超える下げ・無配を「大きな減配」とする。
+  var SMALL_DIP = 0.20;
   function dividendOf(series) {
     if (!series || series.length < 2) return null;
-    var cut = 0, flat = 0;
+    var big = [], small = 0;
     for (var i = 1; i < series.length; i++) {
-      if (series[i] <= 0 || series[i] < series[i - 1]) cut++;
-      else if (series[i] === series[i - 1]) flat++;
+      if (!(series[i] < series[i - 1] || series[i] <= 0)) continue;
+      var spike = i >= 2 && series[i - 1] > series[i - 2] && series[i] >= series[i - 2];
+      if (series[i] > 0 && (series[i] >= series[i - 1] * (1 - SMALL_DIP) || spike)) small++;
+      else big.push(i);
     }
-    var value = cut > 0 ? "cut" : flat === 0 ? "growing" : "stable";
-    var reason = series.map(function (v) { return String(Math.round(v * 100) / 100); }).join("→") + "円"
-      + (value === "growing" ? "(" + (series.length - 1) + "期連続増配)" : cut > 0 ? "(減配" + cut + "回)" : "(減配なし)");
-    // 減配がどれも「ある年だけ突出して、翌年に元の水準以上へ戻った」形なら、記念配当・特別配当の反動かもしれない。
-    // 判定は❌のまま、確認を促す印を付ける
-    var spike = cut > 0;
-    for (var j = 1; j < series.length; j++) {
-      if (series[j] < series[j - 1] && !(j >= 2 && series[j - 1] > series[j - 2] && series[j] >= series[j - 2])) spike = false;
+    var last5 = series.slice(-5), up5 = true;
+    for (var k = 1; k < last5.length; k++) if (!(last5[k] > last5[k - 1])) up5 = false;
+    var up = 0;
+    for (var t = series.length - 1; t > 0 && series[t] > series[t - 1]; t--) up++;
+    var value;
+    if (!big.length) value = up5 ? "growing" : "stable";
+    else {
+      var b = big[big.length - 1];
+      value = big.length === 1 && series[series.length - 1] >= series[b - 1] && b < series.length - 4 ? "recovered" : "cut";
     }
-    if (spike) reason += "。突出した年の翌年に元の水準へ戻っただけなので、記念配当・特別配当の反動かもしれません";
-    return { value: value, reason: reason, spike: spike };
+    var n = series.length;
+    var shown = n > 7 ? series.slice(0, 2).concat(["…"], series.slice(-4)) : series;
+    var reason = n + "期:" + shown.map(function (v) { return v === "…" ? v : String(Math.round(v * 100) / 100); }).join("→") + "円。" +
+      (big.length ? "大きな減配" + big.length + "回(直近は" + (n - big[big.length - 1]) + "期前)" : "大きな減配なし") +
+      (small ? "・小さな下げ" + small + "回" : "") + (up ? "・直近" + up + "期連続増配" : "");
+    return { value: value, reason: reason, big: big.length };
   }
 
   function lastOf(a) { return a && a.length ? a[a.length - 1] : null; }
@@ -788,7 +803,8 @@
     // 営業CFを判定しない業種(金融・不動産)では、営業CFの赤字で❌にしない
     var noCf = fin || CF_SKIP_SECTORS.indexOf(rec.sec) !== -1;
     ev.cash = rec.cash ? Object.assign(cashOf(rec.cash, rec.ocf, noCf) || {}, { series: rec.cash }) : null;
-    ev.dividend = rec.div ? Object.assign(dividendOf(rec.div) || {}, { series: rec.div }) : null;
+    var dLong = rec.dl && rec.dl.length > (rec.div || []).length ? rec.dl : rec.div;
+    ev.dividend = dLong ? Object.assign(dividendOf(dLong) || {}, { series: dLong }) : null;
     // 有報の配当性向は個別(親会社単体)の表にしか載らないことが多い。一般に使う連結の
     // 配当性向に合わせるため、1株配当 ÷ 連結EPS で出す。EPSが無ければ有報の値を使う
     var dLast = lastOf(rec.div), eLast = lastOf(rec.eps);
@@ -905,9 +921,6 @@
         res = { level: MID, note: "当期は高い(5期通算" + e.avg.toFixed(0) + "%)" };
       }
       // 1株配当: 記念配当の反動かもしれない減配は❌のまま、確認を促す
-      if (item.key === "dividend" && res.level === BAD && fromAuto && e.spike) {
-        res = { level: BAD, note: "記念配当の反動？要確認" };
-      }
       // 判定しない項目は、手で入れていなければ集計から外す
       var skipped = !!(sn && sn.kind === "skip" && (v === undefined || v === ""));
       return { item: item, value: v, level: res.level, note: res.note || "", skipped: skipped };
@@ -1066,8 +1079,8 @@
         now.textContent = "この銘柄(" + a.rec.sec + ")は " + sn.how;
         ruleEl.appendChild(now);
       }
-      if (item.key === "dividend" && e.spike) html += '<a class="chip is-edge" target="_blank" rel="noopener noreferrer" href="https://irbank.net/' +
-        encodeURIComponent(a.code) + '/dividend">記念配当かも・IR BANKで確認</a>';
+      if (item.key === "dividend" && e.big) html += '<a class="chip is-edge" target="_blank" rel="noopener noreferrer" href="https://irbank.net/' +
+        encodeURIComponent(a.code) + '/dividend">減配の年をIR BANKで確認</a>';
       if (item.key === "payout" && e.avg != null && parseFloat(e.value) > 70 && e.avg <= 50) html += '<span class="chip is-edge">当期だけ基準超え・ここから悪化していないか確認</span>';
       if (item.key === "payout") {
         var qbox = cell.parentNode.querySelector(".policy-quote");
