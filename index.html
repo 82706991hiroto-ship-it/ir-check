@@ -395,7 +395,7 @@
     <p><span class="note-label">拾い方</span>有報の配当政策の文章に「累進配当」「減配しない」「維持または増配」「前期実績を下限」などがあれば<b>累進配当</b>、
       「DOE」「株主資本配当率」「純資産配当率」などがあれば<b>DOE</b>としています。「DOEも踏まえて判断」のような軽い書き方も含むので、根拠の文で確かめてください。</p>
     <p><span class="note-label">反映の時期</span>有報は年1回、決算から約3か月後に出ます。決算短信や中期経営計画で新しく宣言した会社は、次の有報が出るまでここに載りません。
-      数字は毎月、新しく提出された有報で更新しています(<span id="built"></span>)。</p>
+      数字は毎週、新しく提出された有報で更新しています(<span id="built"></span>)。</p>
     <p><span class="note-label">株価</span>株価はこのページでは配っていません。「株価を見てコピー」で開いた画面で株価をコピーしてこの画面に戻ると、自動で入ります
       (ブラウザが許可しないときは、その銘柄の「貼り付け」が光るので押してください)。
       入れた株価はこの端末のブラウザにだけ保存され、チェックシートでも使えます。利回りは前期の実績配当で計算しています。会社予想ではないので、予想配当で計算する他のサイトとは少し違うことがあります(株式分割は今の株数に割り戻してあるので、分割の前後で利回りが大きくずれることはありません)。</p>
@@ -478,7 +478,7 @@
       (<a href="https://www.digital.go.jp/resources/open_data/public_data_license_v1.0" target="_blank" rel="noopener noreferrer">公共データ利用規約 第1.0版</a>)。
       1株配当は株式分割を発行済株式数から判定して割り戻しており、金融庁が作成したままの数値ではありません。
       有価証券報告書に載るのは5期分のため、ノートで10年を見る項目も5期で判定しています。
-      毎月、新しく提出された有価証券報告書で更新しています。
+      毎週、新しく提出された有価証券報告書で更新しています。
     </p>
     <span class="note-label">注記</span>判定の基準は筆者が高配当株を見るときに使っている目安で、絶対的な正解ではありません。数値はIRバンクなどでご自身で確認したものを入力してください。投資判断は自己責任で行ってください。
   </footer>
@@ -535,10 +535,17 @@
     {
       key: "eps", name: "EPS(1株あたり利益)", star: false,
       rule: "右肩上がりならOK。",
+      more: ["◎ 5期前比+10%超で、10%以上の下げがなく、5%を超える下げは1回まで",
+             "○ 5期前比+10%超で、10%未満の下げが何度かある、または10〜20%の下げが1回だけ。5期前比±10%以内で10%以上の下げがないときも ○",
+             "△ 20%を超える下げ、または10%以上の下げが2回以上(5期前よりは減っていない)",
+             "❌ 5期前比で10%超の減少、または赤字の期がある",
+             "当期だけ+50%以上跳ねた会社には、一時的な利益かもしれないと印を付ける(判定は変えない)"],
       field: selectItem([
         { value: "up", label: "右肩上がり", level: GOOD },
+        { value: "dip", label: "おおむね上昇(途中で1回下げ)", level: OK },
         { value: "flat", label: "横ばい", level: OK },
-        { value: "down", label: "下降・不安定", level: BAD }
+        { value: "unstable", label: "増減が激しい", level: MID },
+        { value: "down", label: "下降・赤字", level: BAD }
       ])
     },
     {
@@ -709,6 +716,31 @@
     return { value: value, reason: reason, edge: edge };
   }
 
+  // EPS(古い順・5期)。利益は配当より上下しやすいので、途中の下げの大きさと回数で段階を分ける
+  function epsOf(s) {
+    if (!s || s.length < 3) return null;
+    if (s.some(function (v) { return v <= 0; })) return { value: "down", reason: s.length + "期のうち赤字の期がある" };
+    var yoy = [];
+    for (var i = 1; i < s.length; i++) yoy.push(s[i] / s[i - 1] - 1);
+    var change = s[s.length - 1] / s[0] - 1;
+    var downs = yoy.filter(function (y) { return y < 0; }).length;
+    var maxDrop = Math.min.apply(null, yoy);
+    var bigs = yoy.filter(function (y) { return y <= -0.10; }).length;
+    var mids = yoy.filter(function (y) { return y < -0.05; }).length;  // 5%以内の下げはほぼ横ばいとして数えない
+    var value;
+    if (change < -FLAT) value = "down";
+    else if (change > FLAT && mids <= 1 && maxDrop > -0.10) value = "up";
+    else if (change > FLAT && (maxDrop > -0.10 || (bigs === 1 && maxDrop > -0.20))) value = "dip";
+    else if (Math.abs(change) <= FLAT && maxDrop > -0.10) value = "flat";
+    else value = "unstable";
+    var reason = s.length + "期前比 " + signedPct(change) + "、前年割れ" + downs + "回" + (downs ? "(最大" + signedPct(maxDrop) + ")" : "");
+    var last = yoy[yoy.length - 1], before = yoy.slice(0, -1);
+    var spike = last >= 0.5 && before.every(function (y) { return y < 0.3; });
+    if (spike) reason += "。当期だけ" + signedPct(last) + "と急に増えています(特別利益など一時的かもしれません)";
+    var edge = Math.abs(Math.abs(change) - FLAT) <= EDGE || Math.abs(maxDrop + 0.10) <= EDGE || Math.abs(maxDrop + 0.20) <= EDGE;
+    return { value: value, reason: reason, edge: edge, spike: spike };
+  }
+
   function cfOf(series) {
     if (!series || series.length < 2) return null;
     var neg = series.filter(function (v) { return v <= 0; }).length;
@@ -791,7 +823,7 @@
     var skip = { value: null, skip: true, reason: "銀行・保険などは業態が違い、この基準が当てはまらないため判定していません(下の説明)" };
     var ev = {};
     ev.sales = rec.sales ? Object.assign(trendOf(rec.sales, true) || {}, { series: rec.sales }) : null;
-    ev.eps = rec.eps ? Object.assign(trendOf(rec.eps, false) || {}, { series: rec.eps }) : null;
+    ev.eps = rec.eps ? Object.assign(epsOf(rec.eps) || {}, { series: rec.eps }) : null;
     ev.opm = fin ? skip : rec.opm != null
       ? { value: (rec.opm * 100).toFixed(1), reason: "当期の営業利益 ÷ 売上高" }
       : { value: null, reason: "営業利益を開示していない会社です(IFRSの商社など)" };
@@ -1079,6 +1111,8 @@
         now.textContent = "この銘柄(" + a.rec.sec + ")は " + sn.how;
         ruleEl.appendChild(now);
       }
+      if (item.key === "eps" && e.spike) html += '<a class="chip is-edge" target="_blank" rel="noopener noreferrer" href="https://irbank.net/' +
+        encodeURIComponent(a.code) + '/results">当期だけ急増・今期の会社予想を確認</a>';
       if (item.key === "dividend" && e.big) html += '<a class="chip is-edge" target="_blank" rel="noopener noreferrer" href="https://irbank.net/' +
         encodeURIComponent(a.code) + '/dividend">減配の年をIR BANKで確認</a>';
       if (item.key === "payout" && e.avg != null && parseFloat(e.value) > 70 && e.avg <= 50) html += '<span class="chip is-edge">当期だけ基準超え・ここから悪化していないか確認</span>';

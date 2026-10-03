@@ -1,9 +1,9 @@
-# 毎月、直近に提出された有価証券報告書で自動採点の数字(fin/N.json)を新しい期に進める。
+# 毎週、直近に提出された有価証券報告書で自動採点の数字(fin/N.json)を新しい期に進める。
 # リポジトリの Settings → Secrets and variables → Actions に EDINET_API_KEY が必要。
-name: EDINETの月次更新
+name: EDINETの週次更新
 on:
   schedule:
-    - cron: "41 1 3 * *"   # 毎月3日 10:41(日本時間)
+    - cron: "41 1 * * 1"   # 毎週月曜 10:41(日本時間)
   workflow_dispatch:
     inputs:
       days:
