@@ -382,11 +382,17 @@ def write_policy(fin):
                 "d": d, "po": round(d[-1] / e[-1] * 100, 1) if d and e and e[-1] > 0 else None,
                 "up": up, "q": r.get("polq", []),
             })
-            dl = r.get("dl")
-            if dl and len(dl) > len(d) and dl[0] > 0 and dl[-1] > 0:
-                # 長期(最大14期)の年平均の増配率と、その年数
-                rows[-1]["gl"] = round((dl[-1] / dl[0]) ** (1 / (len(dl) - 1)) - 1, 4)
-                rows[-1]["nl"] = len(dl) - 1
+            # 1年・5年・10年の増配率(年平均)。長期の記録があればそれを使う。
+            # 5年分(6期)ない会社は、5期(4年)の年平均で代わりにし、年数を g5y に残す
+            series = r.get("dl") if r.get("dl") and len(r["dl"]) > len(d) else d
+            def cagr(n):
+                if len(series) > n and series[-1 - n] > 0 and series[-1] > 0:
+                    return round((series[-1] / series[-1 - n]) ** (1 / n) - 1, 4)
+                return None
+            g = {"g1": cagr(1), "g5": cagr(5), "g10": cagr(10)}
+            if g["g5"] is None and cagr(4) is not None:
+                g["g5"], g["g5y"] = cagr(4), 4
+            rows[-1].update({k: v for k, v in g.items() if v is not None})
     rows.sort(key=lambda x: x["c"])
     out = {"built": dt.date.today().isoformat(), "checked": sum(1 for m in fin.values() for r in m.values() if r.get("pc")),
            "rows": rows}

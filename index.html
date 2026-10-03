@@ -287,7 +287,7 @@
   .tag.p-doe { background: var(--ok-soft); color: var(--ok); }
   .tag.room { background: var(--good-soft); color: var(--good); }
   .facts { display: flex; flex-wrap: wrap; gap: 4px 16px; margin-top: 8px; font-size: 12.5px; color: var(--text-2); font-variant-numeric: tabular-nums; }
-  .facts b { color: var(--text); font-weight: 600; }
+  .facts b { color: var(--text); font-weight: 600; white-space: nowrap; }
   details.quote { margin-top: 8px; font-size: 12.5px; color: var(--text-2); }
   details.quote summary { cursor: pointer; color: var(--text-2); font-size: 12px; }
   details.quote q { display: block; margin-top: 6px; padding-left: 10px; border-left: 2px solid var(--line); line-height: 1.8; quotes: none; }
@@ -383,7 +383,7 @@
         <option value="code">コード順</option>
         <option value="up">連続増配が長い順</option>
         <option value="po">配当性向が低い順</option>
-        <option value="growth">増配率が高い順</option>
+        <option value="growth">増配率(5年)が高い順</option>
       </select></label>
     </div>
     <p class="count" id="count">読み込んでいます…</p>
@@ -1732,13 +1732,9 @@
     if (!d || d.length < 4 || !(d[0] > 0) || !(d[d.length - 1] > 0)) return null;
     return Math.pow(d[d.length - 1] / d[0], 1 / (d.length - 1)) - 1;
   }
-  // 表示・並べ替えに使う増配率は1つだけ。長期(8期以上)の記録があればその年平均、なければ5期の年平均
-  function growthBest(r) {
-    if (r.gl != null && r.nl >= 7) return { g: r.gl, years: r.nl };
-    var g = growth(r);
-    return g == null ? null : { g: g, years: r.d.length - 1 };
-  }
-  function growthL(r) { var b = growthBest(r); return b ? b.g : null; }
+  // 並べ替えは5年の増配率(5年分ない会社は4年で代用)
+  function growthL(r) { return r.g5 != null ? r.g5 : null; }
+  function pct(v, annual) { return v == null ? "—" : (annual ? "年" : "") + (v >= 0 ? (annual ? "" : "+") : "−") + Math.abs(v * 100).toFixed(1) + "%"; }
   function byDesc(f) {
     return function (a, b) { var x = f(a), y = f(b); return (y == null ? -9 : y) - (x == null ? -9 : x); };
   }
@@ -1758,14 +1754,16 @@
     var key = $("sort").value;
     if (key === "up") out.sort(function (a, b) { return b.up - a.up || a.c.localeCompare(b.c); });
     if (key === "po") out.sort(function (a, b) { return (a.po == null ? 999 : a.po) - (b.po == null ? 999 : b.po); });
-    if (key === "growth") out.sort(byDesc(growthL));
+    // 5年分そろう会社を先に、4年で代用した会社はその後に並べる
+    if (key === "growth") out.sort(function (a, b) {
+      return ((a.g5y ? 1 : 0) - (b.g5y ? 1 : 0)) || byDesc(growthL)(a, b);
+    });
     return out;
   }
 
   function item(r) {
     var li = document.createElement("li");
     li.className = "co";
-    var gb = growthBest(r);
     var tags = r.p.map(function (t) { return '<span class="tag ' + (t === "DOE" ? "p-doe" : "p-rui") + '">' + esc(t) + '</span>'; }).join("");
     if (r.po != null && r.po < 30) tags += '<span class="tag room">配当性向30%未満・増配余力</span>';
     li.innerHTML =
@@ -1776,7 +1774,8 @@
         (r.d && r.d.length ? '<span>1株配当 <b>' + r.d.map(yen).join("→") + '円</b></span>' : '') +
         '<span>配当性向 <b>' + (r.po == null ? "—" : r.po + "%") + '</b></span>' +
         (r.up > 0 ? '<span><b>' + r.up + '期</b>連続増配</span>' : '') +
-        (gb ? '<span>増配率 <b>年' + (gb.g * 100).toFixed(1) + '%</b>(' + gb.years + '年平均)</span>' : '') +
+        (r.g1 != null || r.g5 != null ? '<span>増配率 1年 <b>' + pct(r.g1) + '</b> ・ ' + (r.g5y ? r.g5y : 5) + '年 <b>' + pct(r.g5, true) +
+          '</b> ・ 10年 <b>' + pct(r.g10, true) + '</b></span>' : '') +
         '<span>' + esc(r.fy.replace("-", "年")) + '月期の有報</span>' +
       '</div>' +
       (r.q && r.q.length ? '<details class="quote"><summary>有報の配当政策(根拠の文)</summary>' +
