@@ -382,6 +382,11 @@ def write_policy(fin):
                 "d": d, "po": round(d[-1] / e[-1] * 100, 1) if d and e and e[-1] > 0 else None,
                 "up": up, "q": r.get("polq", []),
             })
+            dl = r.get("dl")
+            if dl and len(dl) > len(d) and dl[0] > 0 and dl[-1] > 0:
+                # 長期(最大14期)の年平均の増配率と、その年数
+                rows[-1]["gl"] = round((dl[-1] / dl[0]) ** (1 / (len(dl) - 1)) - 1, 4)
+                rows[-1]["nl"] = len(dl) - 1
     rows.sort(key=lambda x: x["c"])
     out = {"built": dt.date.today().isoformat(), "checked": sum(1 for m in fin.values() for r in m.values() if r.get("pc")),
            "rows": rows}

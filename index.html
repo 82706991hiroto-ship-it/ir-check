@@ -383,7 +383,9 @@
         <option value="code">コード順</option>
         <option value="up">連続増配が長い順</option>
         <option value="po">配当性向が低い順</option>
+        <option value="g1">直近1年の増配率が高い順</option>
         <option value="growth">5期の増配率が高い順</option>
+        <option value="gl">長期(8〜14期)の増配率が高い順</option>
       </select></label>
     </div>
     <p class="count" id="count">読み込んでいます…</p>
@@ -1728,8 +1730,19 @@
   // 5期の1株配当の年平均の伸び
   function growth(r) {
     var d = r.d;
-    if (!d || d.length < 2 || !(d[0] > 0) || !(d[d.length - 1] > 0)) return null;
+    // 3年分以上の記録がないと、1年だけの伸びで上位に来てしまうので出さない
+    if (!d || d.length < 4 || !(d[0] > 0) || !(d[d.length - 1] > 0)) return null;
     return Math.pow(d[d.length - 1] / d[0], 1 / (d.length - 1)) - 1;
+  }
+  // 直近1年の増配率
+  function growth1(r) {
+    var d = r.d;
+    return d && d.length >= 2 && d[d.length - 2] > 0 ? d[d.length - 1] / d[d.length - 2] - 1 : null;
+  }
+  // 長期(8期以上の記録)の年平均。記録が短い会社は並びの最後
+  function growthL(r) { return r.gl != null && r.nl >= 7 ? r.gl : null; }
+  function byDesc(f) {
+    return function (a, b) { var x = f(a), y = f(b); return (y == null ? -9 : y) - (x == null ? -9 : x); };
   }
 
   function filtered() {
@@ -1747,7 +1760,9 @@
     var key = $("sort").value;
     if (key === "up") out.sort(function (a, b) { return b.up - a.up || a.c.localeCompare(b.c); });
     if (key === "po") out.sort(function (a, b) { return (a.po == null ? 999 : a.po) - (b.po == null ? 999 : b.po); });
-    if (key === "growth") out.sort(function (a, b) { return (growth(b) == null ? -9 : growth(b)) - (growth(a) == null ? -9 : growth(a)); });
+    if (key === "growth") out.sort(byDesc(growth));
+    if (key === "g1") out.sort(byDesc(growth1));
+    if (key === "gl") out.sort(byDesc(growthL));
     return out;
   }
 
@@ -1765,7 +1780,9 @@
         (r.d && r.d.length ? '<span>1株配当 <b>' + r.d.map(yen).join("→") + '円</b></span>' : '') +
         '<span>配当性向 <b>' + (r.po == null ? "—" : r.po + "%") + '</b></span>' +
         (r.up > 0 ? '<span><b>' + r.up + '期</b>連続増配</span>' : '') +
+        (growth1(r) != null ? '<span>直近1年 <b>' + (growth1(r) >= 0 ? "+" : "") + (growth1(r) * 100).toFixed(1) + '%</b></span>' : '') +
         (g != null ? '<span>5期の増配率 <b>年' + (g * 100).toFixed(1) + '%</b></span>' : '') +
+        (r.gl != null ? '<span>' + r.nl + '年の増配率 <b>年' + (r.gl * 100).toFixed(1) + '%</b></span>' : '') +
         '<span>' + esc(r.fy.replace("-", "年")) + '月期の有報</span>' +
       '</div>' +
       (r.q && r.q.length ? '<details class="quote"><summary>有報の配当政策(根拠の文)</summary>' +
