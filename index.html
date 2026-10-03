@@ -597,7 +597,7 @@
     },
     {
       key: "dividend", name: "1株あたり配当金", star: true,
-      rule: "長期(有報の最大14期＋手で足した過去の分)で大きな減配がないかと、連続増配か。",
+      rule: "直近14期で大きな減配がないかと、連続増配か。",
       more: ["◎ 大きな減配がなく、直近5期は毎年増配 / ○ 大きな減配なし / △ 大きな減配が1回だけで、その後に減配前の水準を超えた / ❌ それ以外の減配・無配",
              "前年から20%以内の下げと、記念配当の反動(突出した年の翌年に元へ戻っただけ)は減配に数えない。上場企業の約1,800社で、20%以内の下げはその後の回復・再減配の割合がほぼ同じで、20%を超えると悪化していたため",
              "長期の記録がない会社は、直近5期で同じように判定"],
@@ -785,11 +785,15 @@
     return { value: value, reason: reason, edge: edge };
   }
 
-  // 1株配当(古い順・最大14期)。前年から20%以内の下げと、記念配当の反動(突出した年の翌年に元の水準へ戻っただけ)は
+  // 1株配当(古い順。有報の最大14期＋手で足した過去の分)。前年から20%以内の下げと、記念配当の反動(突出した年の翌年に元の水準へ戻っただけ)は
   // 減配に数えない。それを超える下げ・無配を「大きな減配」とする。
   var SMALL_DIP = 0.20;
-  function dividendOf(series) {
-    if (!series || series.length < 2) return null;
+  // 判定はどの会社も直近 JUDGE_N 期で見る(手で古い年を足した会社だけ見る期間が長くならないように)。
+  // 連続増配の期数だけは全部の記録で数え、記録の始まりまで続いていれば「以上」を付ける
+  var JUDGE_N = 14;
+  function dividendOf(full) {
+    if (!full || full.length < 2) return null;
+    var series = full.slice(-JUDGE_N);
     var big = [], small = 0;
     for (var i = 1; i < series.length; i++) {
       if (!(series[i] < series[i - 1] || series[i] <= 0)) continue;
@@ -800,7 +804,8 @@
     var last5 = series.slice(-5), up5 = true;
     for (var k = 1; k < last5.length; k++) if (!(last5[k] > last5[k - 1])) up5 = false;
     var up = 0;
-    for (var t = series.length - 1; t > 0 && series[t] > series[t - 1]; t--) up++;
+    for (var t = full.length - 1; t > 0 && full[t] > full[t - 1]; t--) up++;
+    var upMore = up > 0 && up === full.length - 1;
     var value;
     if (!big.length) value = up5 ? "growing" : "stable";
     else {
@@ -811,7 +816,8 @@
     var shown = n > 7 ? series.slice(0, 2).concat(["…"], series.slice(-4)) : series;
     var reason = n + "期:" + shown.map(function (v) { return v === "…" ? v : String(Math.round(v * 100) / 100); }).join("→") + "円。" +
       (big.length ? "大きな減配" + big.length + "回(直近は" + (n - big[big.length - 1]) + "期前)" : "大きな減配なし") +
-      (small ? "・小さな下げ" + small + "回" : "") + (up ? "・直近" + up + "期連続増配" : "");
+      (small ? "・小さな下げ" + small + "回" : "") + (up ? "・直近" + up + "期" + (upMore ? "以上" : "") + "連続増配" : "") +
+      (full.length > series.length ? "(判定は直近" + series.length + "期、連続増配は" + full.length + "期の記録で数えています)" : "");
     return { value: value, reason: reason, big: big.length };
   }
 
@@ -1773,7 +1779,7 @@
       '<div class="facts">' +
         (r.d && r.d.length ? '<span>1株配当 <b>' + r.d.map(yen).join("→") + '円</b></span>' : '') +
         '<span>配当性向 <b>' + (r.po == null ? "—" : r.po + "%") + '</b></span>' +
-        (r.up > 0 ? '<span><b>' + r.up + '期</b>連続増配</span>' : '') +
+        (r.up > 0 ? '<span><b>' + r.up + '期' + (r.upm ? '以上' : '') + '</b>連続増配</span>' : '') +
         (r.g1 != null || r.g5 != null ? '<span>増配率 1年 <b>' + pct(r.g1) + '</b> ・ ' + (r.g5y ? r.g5y : 5) + '年 <b>' + pct(r.g5, true) +
           '</b> ・ 10年 <b>' + pct(r.g10, true) + '</b>' + (r.g15 != null ? ' ・ 15年 <b>' + pct(r.g15, true) + '</b>' : '') + '</span>' : '') +
         '<span>' + esc(r.fy.replace("-", "年")) + '月期の有報</span>' +

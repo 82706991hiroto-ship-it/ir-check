@@ -376,12 +376,16 @@ def write_policy(fin):
             if not r.get("pol"):
                 continue
             d, e = r.get("div") or [], r.get("eps") or []
-            up = streak_of(r.get("dl") or d)
+            ds = r.get("dl") or d
+            up = streak_of(ds)
             rows.append({
                 "c": code, "n": r.get("n", ""), "s": r.get("sec", ""), "p": r["pol"], "fy": (r.get("fy") or "")[:7],
                 "d": d, "po": round(d[-1] / e[-1] * 100, 1) if d and e and e[-1] > 0 else None,
                 "up": up, "q": r.get("polq", []),
             })
+            # 記録の始まりまで増配が続いている会社は、それより前も増配だったかもしれない(「N期以上」と出す)
+            if up and up == len(ds) - 1:
+                rows[-1]["upm"] = 1
             # 1年・5年・10年の増配率(年平均)。長期の記録があればそれを使う。
             # 5年分(6期)ない会社は、5期(4年)の年平均で代わりにし、年数を g5y に残す
             series = r.get("dl") if r.get("dl") and len(r["dl"]) > len(d) else d
