@@ -389,7 +389,7 @@ def write_policy(fin):
                 if len(series) > n and series[-1 - n] > 0 and series[-1] > 0:
                     return round((series[-1] / series[-1 - n]) ** (1 / n) - 1, 4)
                 return None
-            g = {"g1": cagr(1), "g5": cagr(5), "g10": cagr(10)}
+            g = {"g1": cagr(1), "g5": cagr(5), "g10": cagr(10), "g15": cagr(15)}
             if g["g5"] is None and cagr(4) is not None:
                 g["g5"], g["g5y"] = cagr(4), 4
             rows[-1].update({k: v for k, v in g.items() if v is not None})

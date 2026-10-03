@@ -1775,7 +1775,7 @@
         '<span>配当性向 <b>' + (r.po == null ? "—" : r.po + "%") + '</b></span>' +
         (r.up > 0 ? '<span><b>' + r.up + '期</b>連続増配</span>' : '') +
         (r.g1 != null || r.g5 != null ? '<span>増配率 1年 <b>' + pct(r.g1) + '</b> ・ ' + (r.g5y ? r.g5y : 5) + '年 <b>' + pct(r.g5, true) +
-          '</b> ・ 10年 <b>' + pct(r.g10, true) + '</b></span>' : '') +
+          '</b> ・ 10年 <b>' + pct(r.g10, true) + '</b>' + (r.g15 != null ? ' ・ 15年 <b>' + pct(r.g15, true) + '</b>' : '') + '</span>' : '') +
         '<span>' + esc(r.fy.replace("-", "年")) + '月期の有報</span>' +
       '</div>' +
       (r.q && r.q.length ? '<details class="quote"><summary>有報の配当政策(根拠の文)</summary>' +
