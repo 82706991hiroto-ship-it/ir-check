@@ -129,6 +129,14 @@ def parse_csv(text):
         return sum(v is not None for v in s)
 
     out = {"fyend": fyend}
+    # 「配当の状況」(剰余金の配当)の表: 当期の1株配当が「－」の年を補うのに使う
+    rows = {}
+    for (el, ctx), v in facts.items():
+        if el in ("jpcrp_cor:DividendPerShareDividendsOfSurplus", "jpcrp_cor:TotalAmountOfDividendsDividendsOfSurplus"):
+            mm = re.search(r"Row(\d+)Member", ctx)
+            if mm and num(v) is not None:
+                rows.setdefault(int(mm.group(1)), {})["dps" if "PerShare" in el else "amt"] = num(v)
+    out["surplus"] = [(x["dps"], x.get("amt")) for _, x in sorted(rows.items()) if x.get("dps")]
     ptext = facts.get(("jpcrp_cor:DividendPolicyTextBlock", "FilingDateInstant"))
     out["policy"] = policy(ptext) if ptext else None
     for field, names in SUMMARY.items():
@@ -245,6 +253,14 @@ def record(parsed, name, sector):
             rec[field] = [round(v, 4) for v in s]
     d, sh = parsed.get("div"), parsed.get("shares") or [None] * 5
     it = parsed.get("interim") or [None] * 5
+    if d and d[-1] is None and any(v is not None for v in d[:-1]):
+        # 当期が「－」: 期の途中で分割した年は「配当の状況」から期末の株数基準で計算、行が無く中間も無ければ無配
+        rows = parsed.get("surplus") or []
+        if not rows and not it[-1]:
+            d = d[:-1] + [0.0]
+        elif rows and all(a for _, a in rows):
+            last = rows[-1][1] / rows[-1][0]
+            d = d[:-1] + [round(sum(x / (snap(last / (a / x)) or 1.0) for x, a in rows), 2)]
     if d and d[-1] is not None:
         keep = [i for i, v in enumerate(d) if v is not None]
         rec["div"] = adjust_div([d[i] for i in keep], [sh[i] for i in keep], [it[i] for i in keep])
