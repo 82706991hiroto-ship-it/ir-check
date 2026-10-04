@@ -360,6 +360,32 @@ def close(a, b):
     return abs(a - b) <= max(0.02 * abs(b), 0.011)
 
 
+def apply_splits(fin, haito_html):
+    """HAITOの data/splits.json(決算後の株式分割)で、1株あたりの値(配当・EPS・BPS)を割り戻す。一度だけ。"""
+    path = os.path.join(os.path.dirname(os.path.abspath(haito_html)), "data", "splits.json")
+    if not os.path.exists(path):
+        return 0
+    splits = json.load(open(path, encoding="utf-8"))
+    n = 0
+    for m in fin.values():
+        for code, r in m.items():
+            e = splits.get(code)
+            if not isinstance(e, dict) or not e.get("効力発生日") or not e.get("比率"):
+                continue
+            key, ratio = e["効力発生日"], float(e["比率"])
+            done = r.setdefault("splits", [])
+            if key in done or (r.get("fy") or "") >= key:
+                continue
+            for f in ("div", "eps"):
+                if r.get(f):
+                    r[f] = [round(x / ratio, 2) for x in r[f]]
+            if r.get("bps"):
+                r["bps"] = round(r["bps"] / ratio, 2)
+            done.append(key)
+            n += 1
+    return n
+
+
 def attach_long(fin, haito_html):
     """HAITO(haito-dashboard)の内蔵データにある最大14期の1株配当を、fin の dl(古い順)に付ける。
 
@@ -492,6 +518,7 @@ def main():
         print(write_policy(load_fin()))
     elif a.cmd == "longdiv":
         fin = load_fin()
+        print("決算後の分割で割り戻した会社", apply_splits(fin, a.haito))
         print("長期の1株配当を付けた会社", attach_long(fin, a.haito))
         save_fin(fin)
         print("累進配当・DOEの会社", write_policy(fin))
