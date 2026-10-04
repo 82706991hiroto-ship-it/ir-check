@@ -186,12 +186,22 @@ def adjust_div(divs, shares, interims=None):
                 out[t] = round(it / f + (divs[t] - it), 2)
                 mixed[t] = True
     divs = list(out)
+    # 期末日に分割の効力が出る会社は、その期の株数はもう分割後なのに配当は分割前の実額で載る
+    # (翌期に配当が「下がって」見える)。株数の跳ねを翌期の境目に移して、その期まで割り戻す(HAITOと同じ)
+    shares = list(shares)
+    for t in range(1, len(divs) - 1):
+        f = snap(shares[t] / shares[t - 1]) if shares[t] and shares[t - 1] else 1.0
+        if (f and f >= 1.5 and not mixed[t] and divs[t - 1] and divs[t] and divs[t + 1]
+                and divs[t] / divs[t - 1] >= 0.8 and divs[t + 1] / divs[t] < 0.8
+                and 0.95 <= divs[t + 1] / (divs[t] / f) <= 2.6):
+            shares[t] = shares[t - 1]
     factor = 1.0
     for t in range(len(divs) - 2, -1, -1):
         f = snap(shares[t + 1] / shares[t]) if shares[t] and shares[t + 1] else 1.0
         # 株数が分割らしい倍率で増え、配当がほぼその分下がっていれば、分割前の実額とみなす
+        # (2倍の分割で20円→15円のように、増配込みで下がり方が浅い年もある)
         # 混ざった年を直したところは分割が確かなので、必ず割り戻す
-        if f and f > 1 and divs[t] > 0 and (mixed[t + 1] or divs[t + 1] / divs[t] < 0.75):
+        if f and f > 1 and divs[t] > 0 and (mixed[t + 1] or divs[t + 1] / divs[t] < min(0.85, 1.6 / f)):
             factor *= f
         out[t] = round(divs[t] / factor, 2)
     return trim(out, shares)
