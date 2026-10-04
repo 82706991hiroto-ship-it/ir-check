@@ -376,10 +376,11 @@ def apply_splits(fin, haito_html):
             done = r.setdefault("splits", [])
             if key in done or (r.get("fy") or "") >= key:
                 continue
-            for f in ("div", "eps"):
+            # 「EPS調整済」: 有報の提出前に効力が出た分割で、EPS・BPSは有報の側で分割後の株数になっている
+            for f in ("div",) if e.get("EPS調整済") else ("div", "eps"):
                 if r.get(f):
                     r[f] = [round(x / ratio, 2) for x in r[f]]
-            if r.get("bps"):
+            if r.get("bps") and not e.get("EPS調整済"):
                 r["bps"] = round(r["bps"] / ratio, 2)
             done.append(key)
             n += 1
