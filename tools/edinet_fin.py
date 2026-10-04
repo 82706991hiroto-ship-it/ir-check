@@ -374,7 +374,7 @@ def apply_splits(fin, haito_html):
                 continue
             key, ratio = e["効力発生日"], float(e["比率"])
             done = r.setdefault("splits", [])
-            if key in done or (r.get("fy") or "") >= key:
+            if key in done or (r.get("fy") or "") >= key or key > dt.date.today().isoformat():
                 continue
             # 「EPS調整済」: 有報の提出前に効力が出た分割で、EPS・BPSは有報の側で分割後の株数になっている
             for f in ("div",) if e.get("EPS調整済") else ("div", "eps"):
