@@ -171,6 +171,9 @@ def snap(ratio):
         return 1.0
     for n in NICE:
         if abs(ratio / n - 1) <= 0.06:
+            # 1.1〜1.25倍の小さな分割は、株数がほぼぴったり(1%以内)のときだけ(増資・合併と取り違えない)
+            if n < 1.3 and abs(ratio / n - 1) > 0.01:
+                return 1.0
             return float(n)
     return None
 
