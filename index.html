@@ -896,17 +896,23 @@
   // 取り込んだ1社分の数字から、項目ごとの初期値と根拠を作る
   function scoreRecord(rec) {
     var fin = FINANCIAL_SECTORS.indexOf(rec.sec) !== -1;
-    var skip = { value: null, skip: true, reason: "銀行・保険などは業態が違い、この基準が当てはまらないため判定していません(下の説明)" };
+    // 判定はしないが、取れた値は参考として見せる(入力欄には入れないので集計には入らない)
+    var FIN_WHY = "金融は業態が違うため判定しません";
+    function skipRef(ref, series, what, unit) {
+      return { value: null, skip: true, ref: ref, series: series,
+        reason: (ref != null ? what + " " + ref + (unit || "") + "(参考)。" : "") + FIN_WHY };
+    }
     var ev = {};
     ev.sales = rec.sales ? Object.assign(trendOf(rec.sales, true) || {}, { series: rec.sales }) : null;
     ev.eps = rec.eps ? Object.assign(epsOf(rec.eps) || {}, { series: rec.eps }) : null;
-    ev.opm = fin ? skip : rec.opm != null
+    ev.opm = fin ? skipRef(rec.opm != null ? (rec.opm * 100).toFixed(1) : null, null, "当期", "%") : rec.opm != null
       ? { value: (rec.opm * 100).toFixed(1), reason: "当期の営業利益 ÷ 売上高" }
       : { value: null, reason: "営業利益を開示していない会社です(IFRSの商社など)" };
-    ev.equity = fin ? skip : rec.eq ? { value: (lastOf(rec.eq) * 100).toFixed(1), reason: "当期末", series: rec.eq } : null;
-    ev.cf = fin ? skip
+    ev.equity = fin ? skipRef(rec.eq ? (lastOf(rec.eq) * 100).toFixed(1) : null, rec.eq, "当期末", "%") : rec.eq ? { value: (lastOf(rec.eq) * 100).toFixed(1), reason: "当期末", series: rec.eq } : null;
+    var ocfRef = rec.ocf ? rec.ocf.filter(function (v) { return v > 0; }).length + "/" + rec.ocf.length : null;
+    ev.cf = fin ? skipRef(ocfRef, rec.ocf, "5期のうち黒字", "期")
       : CF_SKIP_SECTORS.indexOf(rec.sec) !== -1 && rec.ocf
-        ? { value: null, skip: true, series: rec.ocf, reason: "不動産業は物件の仕入れで営業CFが赤字に見えるため判定していません(下の説明)" }
+        ? { value: null, skip: true, ref: ocfRef, series: rec.ocf, reason: "5期のうち黒字 " + ocfRef + "期(参考)。不動産業は仕入れで赤字に見えるため判定しません" }
       : rec.ocf ? Object.assign((CF_SUM_SECTORS.indexOf(rec.sec) !== -1 ? cfSumOf(rec.ocf) : cfOf(rec.ocf)) || {}, { series: rec.ocf }) : null;
     // 営業CFを判定しない業種(金融・不動産)では、営業CFの赤字で❌にしない
     var noCf = fin || CF_SKIP_SECTORS.indexOf(rec.sec) !== -1;
@@ -1099,6 +1105,8 @@
         control.step = "any";
         control.inputMode = "decimal";
         control.placeholder = item.field.unit === "倍" ? "1.0" : "0.0";
+        var ea = state.auto && state.auto.ev && state.auto.code === (state.subject.code || "").trim().toUpperCase() ? state.auto.ev[item.key] : null;
+        if (ea && ea.skip && ea.ref != null && !/\//.test(ea.ref)) control.placeholder = "参考 " + ea.ref;
         control.value = state.values[item.key] === undefined ? "" : state.values[item.key];
       }
       control.addEventListener("input", function () { onChange(item.key, control.value); });
@@ -1159,6 +1167,13 @@
 
   function renderEvidence() {
     var a = state.auto;
+    // 前に採点した銘柄(参考値を持たない古い記録)は、判定しない項目だけ作り直す
+    if (a && a.rec && a.ev) {
+      var fresh = null;
+      ["opm", "equity", "cf"].forEach(function (k) {
+        if (a.ev[k] && a.ev[k].skip && a.ev[k].ref === undefined) { fresh = fresh || scoreRecord(a.rec); a.ev[k] = fresh[k]; }
+      });
+    }
     ITEMS.forEach(function (item) {
       var cell = document.querySelector('.item[data-key="' + item.key + '"] .item-evidence');
       if (!cell) return;
