@@ -1511,6 +1511,13 @@
     if (window.HaitoSync) window.HaitoSync.soon();
   }
   function curCode() { return (state.subject.code || "").trim().toUpperCase(); }
+  // 実績PER = 株価 ÷ 前期の1株利益(有報のEPS)。赤字の期は出さない
+  function perLine(rec, price) {
+    var e = rec && rec.eps ? rec.eps[rec.eps.length - 1] : null;
+    if (e == null || !(price > 0)) return "";
+    if (!(e > 0)) return "<br>実績PER <b>―</b>(前期は1株利益が赤字)";
+    return "<br>実績PER <b>" + (price / e).toFixed(1) + "倍</b>(株価 ÷ 前期の1株利益 " + e + "円)";
+  }
   function renderPriceTools() {
     var code = curCode(), ok = /^[0-9][0-9A-Z]{3}$/.test(code);
     document.getElementById("priceTools").hidden = !ok;
@@ -1523,9 +1530,13 @@
       var saved = loadPrices()[code];
       line.innerHTML = "実績配当利回り <b>" + (div / price * 100).toFixed(2) + "%</b>(前期の1株配当 " + div + "円 ÷ 株価 " +
         price.toLocaleString("ja-JP") + "円" + (saved && saved.d ? "・" + saved.d.slice(5).replace("-", "/") + "に入力" : "") + ")" +
-        '<br><small>会社予想ではなく前期の実績で計算しています(株式分割は今の株数に割り戻し済み)。予想配当で計算する他のサイトとは少し違うことがあります。</small>';
+        perLine(a.rec, price) +
+        '<br><small>会社予想ではなく前期の実績で計算しています(株式分割は今の株数に割り戻し済み)。予想で計算する他のサイトとは少し違うことがあります。</small>';
+    } else if (price > 0 && a && a.code === code && a.rec) {
+      // 無配の会社でも PER は出す
+      line.innerHTML = perLine(a.rec, price).replace(/^<br>/, "");
     } else {
-      line.textContent = div > 0 ? "株価を入れると、実績配当利回りが出ます。" : "";
+      line.textContent = div > 0 ? "株価を入れると、実績配当利回りと実績PERが出ます。" : "";
     }
   }
   function setPrice(v) {
