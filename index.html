@@ -436,6 +436,7 @@
         <option value="growth">増配率(5年)が高い順</option>
       </select></label>
     </div>
+    <p class="copy-tip" style="margin:0 0 8px">「株価を見てコピー」で開いたYahoo!ファイナンスの「参考指標」の欄(配当利回り〜単元株数)をまとめてコピーして戻ると、株価と予想配当が一度に入り、会社予想の利回りで表示します。</p>
     <p class="count" id="count">読み込んでいます…</p>
     <ul class="list" id="list"></ul>
     <button class="more" id="more" type="button" hidden>もっと見る</button>
@@ -1673,6 +1674,7 @@
     if (!(fdiv > 0) && !(price > 0) && isNaN(feps)) return null;
     return { price: price > 0 ? Math.round(price * 10) / 10 : NaN, approx: !exact, fdiv: fdiv, feps: feps };
   }
+  window.irParseQuoteBlock = parseQuoteBlock;  // 探すタブの一覧からも使う
   function loadPrices() { try { return JSON.parse(localStorage.getItem(PRICE_KEY) || "{}"); } catch (e) { return {}; } }
   // 銘柄ごとに { p: 株価, d: 入れた日, f: 会社予想の1株配当(任意) }
   function storePrice(code, p, f, fe) {
@@ -1985,7 +1987,10 @@
   }
   function yieldText(r) {
     var y = yieldOf(r), pr = prices[r.c];
-    return y == null ? "" : (pr.f > 0 ? "予想" : "実績") + '配当利回り <b>' + y.toFixed(2) + '%</b>(' + (pr.f > 0 ? "予想配当 " + pr.f + "円" : "前期の配当") + ' ÷ ' + pr.d.slice(5).replace("-", "/") + 'に入れた株価 ' + pr.p.toLocaleString("ja-JP") + '円)';
+    if (y == null) return "";
+    var d = r.d && r.d[r.d.length - 1];
+    return (pr.f > 0 ? "予想" : "実績") + '配当利回り <b>' + y.toFixed(2) + '%</b>(' + (pr.f > 0 ? "予想配当 " + pr.f + "円" : "前期の配当") + ' ÷ ' + pr.d.slice(5).replace("-", "/") + 'に入れた株価 ' + pr.p.toLocaleString("ja-JP") + '円)' +
+      (pr.f > 0 && d > 0 ? '<br>実績配当利回り ' + (d / pr.p * 100).toFixed(2) + '%(前期の配当 ' + d + '円)' : "");
   }
   var rows = [], shown = PAGE, pol = "";
   var $ = function (id) { return document.getElementById(id); };
@@ -2138,6 +2143,29 @@
     storePrice(row.dataset.code, p);
     row.querySelector(".yld").innerHTML = yieldText(byCode(row.dataset.code));
   });
+  // Yahoo!ファイナンスの参考指標をまとめてコピーしたとき: 株価・予想配当・予想EPSを一度に入れる
+  function quoteOf(t) { return t && t.length > 40 && window.irParseQuoteBlock ? window.irParseQuoteBlock(t) : null; }
+  function applyQuote(row, b) {
+    var code = row.dataset.code;
+    prices = loadPrices();
+    var e = prices[code] || {};
+    if (b.price > 0) { e.p = b.price; e.d = today(); }
+    if (b.fdiv > 0) e.f = b.fdiv;
+    if (!isNaN(b.feps)) e.e = b.feps;
+    prices[code] = e;
+    try { localStorage.setItem(PRICE_KEY, JSON.stringify(prices)); } catch (x) {}
+    if (window.HaitoSync) window.HaitoSync.soon();
+    if (e.p) row.querySelector("input").value = e.p;
+    row.querySelector(".yld").innerHTML = yieldText(byCode(code));
+    row.classList.remove("is-waiting");
+    try { sessionStorage.removeItem(WAIT_KEY); } catch (x) {}
+    toast(code + ": " + [b.price > 0 ? "株価 " + b.price.toLocaleString("ja-JP") + "円" : "", b.fdiv > 0 ? "予想配当 " + b.fdiv + "円" : ""].filter(Boolean).join("・") + " を入れました");
+  }
+  $("list").addEventListener("paste", function (e) {
+    var row = e.target.closest(".price-row"), t = e.clipboardData && e.clipboardData.getData("text");
+    var b = row && quoteOf(t);
+    if (b) { e.preventDefault(); applyQuote(row, b); }
+  });
   // 「株価を見る」を押した銘柄を覚えておき、この画面に戻ってきたらコピーした株価を自動で入れる。
   // ブラウザが許可しないとき(iPhoneなど)は、その銘柄の「貼り付け」を目立たせる
   var WAIT_KEY = "irPriceWaiting";
@@ -2155,6 +2183,8 @@
     var giveUp = function () { row.classList.add("is-waiting"); row.scrollIntoView({ block: "center", behavior: "smooth" }); };
     if (!(navigator.clipboard && navigator.clipboard.readText)) return giveUp();
     navigator.clipboard.readText().then(function (t) {
+      var b = quoteOf(t);
+      if (b) { applyQuote(row, b); row.scrollIntoView({ block: "center", behavior: "smooth" }); return; }
       var p = t && t.length <= 40 ? parsePrice(t) : 0;
       if (!(p > 0 && p < 10000000)) return giveUp();
       applyPrice(row, String(p));
@@ -2178,6 +2208,9 @@
     var row = btn.closest(".price-row"), input = row.querySelector("input");
     if (navigator.clipboard && navigator.clipboard.readText) {
       navigator.clipboard.readText().then(function (t) {
+        var b = quoteOf(t);
+        if (b) { applyQuote(row, b); return; }
+        if (t && t.length > 40) { toast("コピーした内容から株価・予想配当を読み取れませんでした。参考指標の見出しから単元株数までをコピーし直してください"); return; }
         if (parsePrice(t)) { applyPrice(row, t); row.classList.remove("is-waiting"); try { sessionStorage.removeItem(WAIT_KEY); } catch (x) {} }
         else input.focus();
       }, function () { input.focus(); });
