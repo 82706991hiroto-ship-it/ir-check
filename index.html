@@ -1840,7 +1840,43 @@
     $("more").hidden = list.length <= shown;
     $("more").textContent = "もっと見る(残り" + (list.length - shown) + "社)";
   }
-  function reset() { shown = PAGE; render(); }
+  function reset() { shown = PAGE; render(); saveFilters(); }
+  // 検索条件はこの端末に残す(HAITOへ行って戻ってきたときやアプリを開き直したときも続きから)
+  var FKEY = "irFindFilters", FIELDS = ["q", "sec", "po", "up", "sort"];
+  function saveFilters(last) {
+    var f = { pol: pol, shown: shown };
+    FIELDS.forEach(function (id) { f[id] = $(id).value; });
+    try {
+      var prev = JSON.parse(localStorage.getItem(FKEY) || "{}");
+      f.last = last || prev.last || "";
+      localStorage.setItem(FKEY, JSON.stringify(f));
+    } catch (e) {}
+  }
+  function restoreFilters() {
+    var f;
+    try { f = JSON.parse(localStorage.getItem(FKEY) || "null"); } catch (e) { f = null; }
+    if (!f) return null;
+    FIELDS.forEach(function (id) {
+      var el = $(id);
+      if (f[id] == null) return;
+      // 業種の選択肢は読み込んだ一覧から作るので、無くなった業種は「すべて」に戻す
+      if (el.tagName === "SELECT" && !Array.prototype.some.call(el.options, function (o) { return o.value === f[id]; })) return;
+      el.value = f[id];
+    });
+    pol = f.pol || "";
+    Array.prototype.forEach.call(document.querySelectorAll("#polSeg button"), function (x) { x.classList.toggle("active", x.dataset.v === pol); });
+    if (f.shown > PAGE) shown = f.shown;
+    return f;
+  }
+  // 最後に「10項目でチェックする」を押した会社の所まで一覧を送る
+  function scrollToLast() {
+    var f;
+    try { f = JSON.parse(localStorage.getItem(FKEY) || "null"); } catch (e) { f = null; }
+    var li = f && f.last && document.querySelector('#list [data-code="' + f.last + '"]');
+    if (!li) return;
+    li = li.closest("li") || li;
+    setTimeout(function () { li.scrollIntoView({ block: "center" }); }, 60);
+  }
   window.irFindReloadPrices = function () { prices = loadPrices(); if (rows.length) render(); };
 
   Array.prototype.forEach.call(document.querySelectorAll("#polSeg button"), function (b) {
@@ -1851,7 +1887,7 @@
     });
   });
   ["q", "sec", "po", "up", "sort"].forEach(function (id) { $(id).addEventListener(id === "q" ? "input" : "change", reset); });
-  $("more").addEventListener("click", function () { shown += PAGE; render(); });
+  $("more").addEventListener("click", function () { shown += PAGE; render(); saveFilters(); });
 
   function byCode(c) { return rows.filter(function (r) { return r.c === c; })[0]; }
   function applyPrice(row, value) {
@@ -1919,7 +1955,7 @@
 
   var loaded = false;
   window.irLoadFind = function () {
-    if (loaded) return;
+    if (loaded) { scrollToLast(); return; }
     loaded = true;
   fetch("policy.json").then(function (r) { return r.json(); }).then(function (data) {
     rows = data.rows || [];
@@ -1929,7 +1965,9 @@
       var o = document.createElement("option"); o.value = s; o.textContent = s + "(" + secs[s] + ")"; $("sec").appendChild(o);
     });
     $("built").textContent = data.built + " 時点、" + (data.checked || 0).toLocaleString("ja-JP") + "社の配当政策を確認";
+    restoreFilters();
     render();
+    scrollToLast();
   }).catch(function () { loaded = false; $("count").textContent = "一覧を読み込めませんでした。時間を置いて開き直してください。"; });
   };
   // 「10項目でチェックする」は同じページのチェックタブで開く
@@ -1937,6 +1975,7 @@
     var a = e.target.closest(".co-actions a.to-check");
     if (!a || !window.irOpenCheck) return;
     e.preventDefault();
+    saveFilters(a.dataset.code);
     window.irOpenCheck(a.dataset.code);
   });
   // 最初から探すタブで開いたとき(先に読み込まれる本体からは、まだ呼べない)
