@@ -436,7 +436,6 @@
         <option value="growth">増配率(5年)が高い順</option>
       </select></label>
     </div>
-    <p class="copy-tip" style="margin:0 0 8px">「株価を見てコピー」で開いたYahoo!ファイナンスの「参考指標」の欄(配当利回り〜単元株数)をまとめてコピーして戻ると、株価と予想配当が一度に入り、会社予想の利回りで表示します。</p>
     <p class="count" id="count">読み込んでいます…</p>
     <ul class="list" id="list"></ul>
     <button class="more" id="more" type="button" hidden>もっと見る</button>
@@ -447,9 +446,7 @@
       「DOE」「株主資本配当率」「純資産配当率」などがあれば<b>DOE</b>としています。「DOEも踏まえて判断」のような軽い書き方も含むので、根拠の文で確かめてください。</p>
     <p><span class="note-label">反映の時期</span>有報は年1回、決算から約3か月後に出ます。決算短信や中期経営計画で新しく宣言した会社は、次の有報が出るまでここに載りません。
       数字は毎週、新しく提出された有報で更新しています(<span id="built"></span>)。</p>
-    <p><span class="note-label">株価</span>株価はこのページでは配っていません。「株価を見てコピー」で開いた画面で株価をコピーしてこの画面に戻ると、自動で入ります
-      (ブラウザが許可しないときは、その銘柄の「貼り付け」が光るので押してください)。
-      入れた株価はこの端末のブラウザにだけ保存され、チェックシートでも使えます。利回りは前期の実績配当で計算しています。会社予想ではないので、予想配当で計算する他のサイトとは少し違うことがあります(株式分割は今の株数に割り戻してあるので、分割の前後で利回りが大きくずれることはありません)。</p>
+    <p><span class="note-label">株価</span>「株価・予想を見る」で開いたYahoo!ファイナンスの参考指標の欄(色の付いた所)をまとめてコピーして戻ると、株価と予想配当が入ります。株価だけのコピーでもかまいません。入れた値はこの端末に保存し、チェックシートでも使います。</p>
     <p><span class="note-label">出典</span><a href="https://disclosure2.edinet-fsa.go.jp/" target="_blank" rel="noopener noreferrer">EDINET</a>の有価証券報告書をもとに当サイトが加工して作成しています
       (<a href="https://www.digital.go.jp/resources/open_data/public_data_license_v1.0" target="_blank" rel="noopener noreferrer">公共データ利用規約 第1.0版</a>)。
       1株配当は株式分割を割り戻しています。特定の銘柄の売買を勧めるものではありません。投資判断は自己責任で行ってください。</p>
@@ -464,9 +461,8 @@
       <label>予想配当(任意)<input type="text" id="subjFDiv" inputmode="decimal" autocomplete="off" placeholder="会社予想の1株配当(円)"></label>
     </div>
     <div class="price-tools" id="priceTools" hidden>
-      <a id="priceLink" target="_blank" rel="noopener noreferrer">株価を見てコピー(Yahoo!ファイナンス) ↗</a>
-      <button type="button" class="btn-link" id="pasteBtn">📋 コピーした株価を貼り付け</button>
-      <small class="copy-tip">Yahoo!ファイナンスの「参考指標」の欄(配当利回り〜単元株数)をまとめて選んでコピーすると、株価・予想配当・予想EPSが一度に入ります。</small>
+      <a id="priceLink" target="_blank" rel="noopener noreferrer">株価・予想を見る(Yahoo!) ↗</a>
+      <button type="button" class="btn-link" id="pasteBtn">📋 貼り付け</button>
       <span class="yield-line" id="yieldLine"></span>
     </div>
     <div class="auto-status" id="autoStatus" hidden>
@@ -1703,33 +1699,34 @@
     if (!(price > 0) || isNaN(fe)) return "";
     return fe > 0 ? "<br>予想PER <b>" + (price / fe).toFixed(1) + "倍</b>(株価 ÷ 会社予想の1株利益 " + fe + "円)" : "<br>予想PER <b>―</b>(会社予想は赤字)";
   }
+  // 開いたときに「参考指標」の欄まで送り、単元株数までを色付けする(Safari・Chromeのテキストフラグメント)
+  function yahooUrl(code) {
+    return "https://finance.yahoo.co.jp/quote/" + encodeURIComponent(code) + ".T#:~:text=" + encodeURIComponent("参考指標") + "," + encodeURIComponent("単元株数");
+  }
+  window.irYahooUrl = yahooUrl;
   function renderPriceTools() {
     var code = curCode(), ok = /^[0-9][0-9A-Z]{3}$/.test(code);
     document.getElementById("priceTools").hidden = !ok;
     if (!ok) return;
-    document.getElementById("priceLink").href = "https://finance.yahoo.co.jp/quote/" + encodeURIComponent(code) + ".T";
+    document.getElementById("priceLink").href = yahooUrl(code);
     var line = document.getElementById("yieldLine");
-    var a = state.auto, div = a && a.rec && a.code === code && a.rec.div ? a.rec.div[a.rec.div.length - 1] : null;
-    var price = parseFloat(state.subject.price), fdiv = parseFloat(state.subject.fdiv);
-    var saved = loadPrices()[code], when = saved && saved.d ? "・" + saved.d.slice(5).replace("-", "/") + "に入力" : "";
-    if (fdiv > 0 && price > 0) {
-      // 予想配当を入れたら、Yahoo!ファイナンスなどと同じ「会社予想」の利回りを先に出す
-      line.innerHTML = "予想配当利回り <b>" + (fdiv / price * 100).toFixed(2) + "%</b>(会社予想の1株配当 " + fdiv + "円 ÷ 株価 " +
-        price.toLocaleString("ja-JP") + "円" + when + ")" +
-        (div > 0 ? "<br>実績配当利回り " + (div / price * 100).toFixed(2) + "%(前期の1株配当 " + div + "円)" +
-          (fdiv > div * 1.005 ? " → 今期は" + ((fdiv / div - 1) * 100).toFixed(1) + "%の増配予想" : fdiv < div * 0.995 ? " → 今期は減配予想" : " → 今期は据え置き予想") : "") +
-        fperLine(price) + (a && a.code === code && a.rec ? perLine(a.rec, price) : "");
-    } else if (div > 0 && price > 0) {
-      line.innerHTML = "実績配当利回り <b>" + (div / price * 100).toFixed(2) + "%</b>(前期の1株配当 " + div + "円 ÷ 株価 " +
-        price.toLocaleString("ja-JP") + "円" + when + ")" +
-        perLine(a.rec, price) +
-        '<br><small>前期の実績で計算しています(株式分割は今の株数に割り戻し済み)。Yahoo!ファイナンスなどの配当利回りは会社予想なので、「予想配当」に会社予想の1株配当を入れると同じ値になります。</small>';
-    } else if (price > 0 && a && a.code === code && a.rec) {
-      // 無配の会社でも PER は出す
-      line.innerHTML = perLine(a.rec, price).replace(/^<br>/, "");
-    } else {
-      line.textContent = div > 0 ? "株価を入れると、実績配当利回りと実績PERが出ます。" : "";
-    }
+    var a = state.auto, rec = a && a.rec && a.code === code ? a.rec : null;
+    var div = rec && rec.div ? rec.div[rec.div.length - 1] : null;
+    var price = parseFloat(state.subject.price), fdiv = parseFloat(state.subject.fdiv), fe = parseFloat(state.subject.feps);
+    var eps = rec && rec.eps ? rec.eps[rec.eps.length - 1] : null;
+    if (!(price > 0)) { line.textContent = ""; return; }
+    // 利回り: 会社予想(入れたとき) ・ 前期の実績
+    var y = [];
+    if (fdiv > 0) y.push("予想 <b>" + (fdiv / price * 100).toFixed(2) + "%</b>");
+    if (div > 0) y.push((fdiv > 0 ? "実績 " + (div / price * 100).toFixed(2) + "%" : "実績 <b>" + (div / price * 100).toFixed(2) + "%</b>"));
+    var chg = fdiv > 0 && div > 0 ? (fdiv > div * 1.005 ? "今期 +" + ((fdiv / div - 1) * 100).toFixed(1) + "% 増配予想" : fdiv < div * 0.995 ? "今期 減配予想" : "今期 据え置き予想") : "";
+    // PER: 会社予想 ・ 前期の実績(赤字は ―)
+    var per = [];
+    if (!isNaN(fe)) per.push("予想 " + (fe > 0 ? (price / fe).toFixed(1) + "倍" : "―"));
+    if (eps != null) per.push("実績 " + (eps > 0 ? (price / eps).toFixed(1) + "倍" : "―(赤字)"));
+    line.innerHTML = (y.length ? "配当利回り " + y.join(" ・ ") + (chg ? "(" + chg + ")" : "") : "") +
+      (per.length ? (y.length ? "<br>" : "") + "PER " + per.join(" ・ ") : "") +
+      (div > 0 && !(fdiv > 0) ? '<br><small>Yahoo!などは会社予想の利回りです。予想配当を入れると同じ値になります。</small>' : "");
   }
   function setPrice(v) {
     var input = document.getElementById("subjPrice");
@@ -1989,8 +1986,8 @@
     var y = yieldOf(r), pr = prices[r.c];
     if (y == null) return "";
     var d = r.d && r.d[r.d.length - 1];
-    return (pr.f > 0 ? "予想" : "実績") + '配当利回り <b>' + y.toFixed(2) + '%</b>(' + (pr.f > 0 ? "予想配当 " + pr.f + "円" : "前期の配当") + ' ÷ ' + pr.d.slice(5).replace("-", "/") + 'に入れた株価 ' + pr.p.toLocaleString("ja-JP") + '円)' +
-      (pr.f > 0 && d > 0 ? '<br>実績配当利回り ' + (d / pr.p * 100).toFixed(2) + '%(前期の配当 ' + d + '円)' : "");
+    return "利回り " + (pr.f > 0 ? "予想 <b>" + y.toFixed(2) + "%</b>" + (d > 0 ? " ・ 実績 " + (d / pr.p * 100).toFixed(2) + "%" : "") : "実績 <b>" + y.toFixed(2) + "%</b>") +
+      ' <small>(' + pr.d.slice(5).replace("-", "/") + ')</small>';
   }
   var rows = [], shown = PAGE, pol = "";
   var $ = function (id) { return document.getElementById(id); };
@@ -2058,7 +2055,7 @@
       '<div class="price-row" data-code="' + esc(r.c) + '">' +
         '<input type="text" inputmode="decimal" autocomplete="off" placeholder="株価" aria-label="株価" value="' + (prices[r.c] && prices[r.c].p ? prices[r.c].p : "") + '">' +
         '<button type="button" class="paste">📋 貼り付け</button>' +
-        '<a href="https://finance.yahoo.co.jp/quote/' + encodeURIComponent(r.c) + '.T" target="_blank" rel="noopener noreferrer">株価を見てコピー ↗</a>' +
+        '<a href="' + window.irYahooUrl(r.c) + '" target="_blank" rel="noopener noreferrer">株価・予想を見る ↗</a>' +
         '<span class="yld">' + yieldText(r) + '</span></div>' +
       '<div class="co-actions"><a class="to-check" data-code="' + esc(r.c) + '" href="./?code=' + encodeURIComponent(r.c) + '">10項目でチェックする ›</a>' +
       '<a class="sub" href="https://irbank.net/' + encodeURIComponent(r.c) + '/dividend" target="_blank" rel="noopener noreferrer">配当の推移(IR BANK)</a></div>';
