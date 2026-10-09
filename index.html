@@ -359,6 +359,29 @@
   .mini-stats small { font-size: 10.5px; color: var(--muted); }
   .mini-stats b { font-size: 15px; font-variant-numeric: tabular-nums; }
   .mini-more { white-space: pre-line; font-size: 12px; color: var(--text-2); background: var(--field); border-radius: 8px; padding: 8px 10px; margin: 4px 0 0; }
+  /* 動き(「視差効果を減らす」の設定では動かさない) */
+  @media (prefers-reduced-motion: no-preference) {
+    @keyframes rise { from { opacity: .001; transform: translateY(10px); } to { opacity: 1; transform: none; } }
+    @keyframes grow { from { transform: scaleY(0); } to { transform: scaleY(1); } }
+    @keyframes reveal { from { clip-path: inset(0 100% 0 0); } to { clip-path: inset(0 0 0 0); } }
+    @keyframes pop { from { opacity: 0; transform: scale(.4); } to { opacity: 1; transform: none; } }
+    .tab-enter .panel { animation: rise .45s cubic-bezier(.2,.7,.2,1) both; }
+    .tab-enter .panel:nth-of-type(2) { animation-delay: .05s } .tab-enter .panel:nth-of-type(n+3) { animation-delay: .1s }
+    /* 推移のグラフ: 銘柄を開いたときだけ、棒が古い期から順に伸び、EPSの線が描かれる */
+    .trends.anim .bar { animation: grow .55s cubic-bezier(.2,.7,.2,1) both; transform-origin: bottom; animation-delay: calc(var(--i) * 45ms); }
+    @keyframes fade { from { opacity: 0; } to { opacity: 1; } }
+    .trends.anim .cap, .trends.anim .eps-over .dlab, .trends.anim .eps-over .tick { animation: fade .4s .5s both; }
+    .trends.anim .eps-over svg { animation: reveal .9s .3s ease-out backwards; }
+    .trends.anim .eps-over .dot { animation: pop .3s cubic-bezier(.2,.7,.2,1) both; animation-delay: calc(.3s + var(--i) * 120ms); }
+    /* 探すタブ: 会社のカードが上から順に出て、小さな棒が伸びる */
+    #list.anim li { animation: rise .4s cubic-bezier(.2,.7,.2,1) both; }
+    #list.anim li:nth-child(2) { animation-delay: .04s } #list.anim li:nth-child(3) { animation-delay: .08s }
+    #list.anim li:nth-child(4) { animation-delay: .12s } #list.anim li:nth-child(n+5) { animation-delay: .16s }
+    #list.anim .mini-bars i { animation: grow .5s .15s cubic-bezier(.2,.7,.2,1) both; transform-origin: bottom; }
+    .mini-more:not([hidden]), .toast { animation: rise .3s both; }
+    button.btn:active, .tab:active, .mini-chart:active { transform: scale(.97); }
+    button.btn, .tab, .mini-chart { transition: transform .12s ease; }
+  }
   .copy-tip { display: block; width: 100%; font-size: 11.5px; color: var(--muted); line-height: 1.6; }
   .sync-box { margin: 16px 0 0; background: var(--field); border-radius: 12px; padding: 12px 14px; font-size: 13px; line-height: 1.8; }
   .sync-box p { margin: 0 0 8px; color: var(--text-2); }
@@ -1292,7 +1315,7 @@
       var h = v > 0 ? Math.max(2, v / top * 100) : 2;
       var cap = i === vals.length - 1 ? '<span class="cap" style="bottom:calc(' + h + '% + 3px);top:auto">' + fmtNum(v, opts.unit) + "</span>" : "";
       return '<button type="button" class="col" data-i="' + i + '" aria-label="' + labels[i] + " " + fmtNum(v, opts.unit) + (down ? " 前の期より減少" : "") + '">' +
-        cap + '<span class="bar' + (down ? " is-down" : v <= 0 ? " is-neg" : "") + '" style="height:' + h + '%"></span></button>';
+        cap + '<span class="bar' + (down ? " is-down" : v <= 0 ? " is-neg" : "") + '" style="height:' + h + '%;--i:' + i + '"></span></button>';
     }).join("");
     var every = vals.length > 8 ? 2 : 1;
     var xs = labels.map(function (l, i) { return "<span>" + ((vals.length - 1 - i) % every === 0 ? l : "") + "</span>"; }).join("");
@@ -1338,7 +1361,7 @@
       '<span class="tick l" style="top:' + (H / 2) + 'px">' + fmtNum(poTop / 2, "%") + '</span>' +
       '<span class="tick r" style="top:' + y((eTop + eBot) / 2) + 'px">' + fmtNum((eTop + eBot) / 2, "円") + '</span>' +
       eps.map(function (v, i) {
-        return '<i class="dot' + (v <= 0 ? " is-neg" : "") + '" data-i="' + i + '" style="left:' + ((i + 0.5) / n * 100) + '%;top:' + y(v) + 'px"></i>' +
+        return '<i class="dot' + (v <= 0 ? " is-neg" : "") + '" data-i="' + i + '" style="--i:' + i + ';left:' + ((i + 0.5) / n * 100) + '%;top:' + y(v) + 'px"></i>' +
           (i === n - 1 ? '<b class="dlab" style="left:' + ((i + 0.5) / n * 100) + '%;top:' + y(v) + 'px">' + fmtNum(v, "円") + "</b>" : "");
       }).join("") + "</div>";
     bars.insertAdjacentHTML("beforeend", over);
@@ -1363,6 +1386,9 @@
     if (!rec || !rec.fy || !dps || dps.length < 2) { panel.hidden = true; return; }
     panel.hidden = false;
     box.innerHTML = "";
+    // 別の銘柄を開いたときだけ動かす(入力のたびには動かさない)
+    box.classList.toggle("anim", renderTrends.last !== code);
+    renderTrends.last = code;
     box.appendChild(barChart("1株配当", "期ごとの年間配当(円)。赤は前の期より減った期", fyLabels(rec.fy, dps.length), dps, { unit: "円", downMark: true }));
     var eps = rec.eps, div = rec.div;
     // 1株配当と1株利益で期の数が違う会社(分割の年を外した等)は、新しい期の方からそろえる
@@ -1952,7 +1978,11 @@
     try { localStorage.setItem("irTab", t); } catch (e) {}
     try { history.replaceState(null, "", location.pathname + "#" + t); } catch (e) {}
     if (t === "find" && window.irLoadFind) window.irLoadFind();
-    if (changed && !quiet) window.scrollTo(0, 0);
+    if (changed && !quiet) {
+      window.scrollTo(0, 0);
+      document.body.classList.remove("tab-enter"); void document.body.offsetWidth; document.body.classList.add("tab-enter");
+      clearTimeout(setTab.t); setTab.t = setTimeout(function () { document.body.classList.remove("tab-enter"); }, 800);
+    }
   }
   Array.prototype.forEach.call(document.querySelectorAll(".tabbar .tab[data-tab]"), function (b) {
     b.addEventListener("click", function () { setTab(b.dataset.tab); });
@@ -2110,6 +2140,7 @@
     ul.innerHTML = "";
     if (!list.length) { ul.innerHTML = '<li class="empty">条件に合う会社はありません。</li>'; }
     list.slice(0, shown).forEach(function (r) { ul.appendChild(item(r)); });
+    ul.classList.remove("anim"); void ul.offsetWidth; ul.classList.add("anim");
     $("more").hidden = list.length <= shown;
     $("more").textContent = "もっと見る(残り" + (list.length - shown) + "社)";
   }
