@@ -442,6 +442,7 @@
       <label>証券コード<input type="text" id="subjCode" inputmode="numeric" placeholder="8306"></label>
       <label>銘柄名<input type="text" id="subjName" placeholder="三菱UFJ"></label>
       <label>株価(任意)<input type="text" id="subjPrice" inputmode="decimal" autocomplete="off" placeholder="PBR・利回りに使います"></label>
+      <label>予想配当(任意)<input type="text" id="subjFDiv" inputmode="decimal" autocomplete="off" placeholder="会社予想の1株配当(円)"></label>
     </div>
     <div class="price-tools" id="priceTools" hidden>
       <a id="priceLink" target="_blank" rel="noopener noreferrer">株価を見てコピー(Yahoo!ファイナンス) ↗</a>
@@ -1471,6 +1472,8 @@
     var url = "../haito-dashboard/?watch=" + encodeURIComponent(code);
     var price = parseFloat(state.subject.price);
     if (price > 0) url += "&price=" + encodeURIComponent(price);
+    var fdiv = parseFloat(state.subject.fdiv);
+    if (fdiv > 0) url += "&fdiv=" + encodeURIComponent(fdiv);
     location.href = url;
   });
 
@@ -1601,10 +1604,15 @@
     return m ? m[0] : "";
   }
   function loadPrices() { try { return JSON.parse(localStorage.getItem(PRICE_KEY) || "{}"); } catch (e) { return {}; } }
-  function storePrice(code, p) {
+  // 銘柄ごとに { p: 株価, d: 入れた日, f: 会社予想の1株配当(任意) }
+  function storePrice(code, p, f) {
     if (!code) return;
-    var all = loadPrices();
-    if (p > 0) all[code] = { p: +p, d: todayStamp() }; else delete all[code];
+    var all = loadPrices(), cur = all[code] || {};
+    var e = {};
+    var pp = p === undefined ? cur.p : p, ff = f === undefined ? cur.f : f;
+    if (pp > 0) { e.p = +pp; e.d = p === undefined ? cur.d : todayStamp(); }
+    if (ff > 0) e.f = +ff;
+    if (e.p || e.f) all[code] = e; else delete all[code];
     try { localStorage.setItem(PRICE_KEY, JSON.stringify(all)); } catch (e) {}
     if (window.HaitoSync) window.HaitoSync.soon();
   }
@@ -1623,13 +1631,20 @@
     document.getElementById("priceLink").href = "https://finance.yahoo.co.jp/quote/" + encodeURIComponent(code) + ".T";
     var line = document.getElementById("yieldLine");
     var a = state.auto, div = a && a.rec && a.code === code && a.rec.div ? a.rec.div[a.rec.div.length - 1] : null;
-    var price = parseFloat(state.subject.price);
-    if (div > 0 && price > 0) {
-      var saved = loadPrices()[code];
+    var price = parseFloat(state.subject.price), fdiv = parseFloat(state.subject.fdiv);
+    var saved = loadPrices()[code], when = saved && saved.d ? "・" + saved.d.slice(5).replace("-", "/") + "に入力" : "";
+    if (fdiv > 0 && price > 0) {
+      // 予想配当を入れたら、Yahoo!ファイナンスなどと同じ「会社予想」の利回りを先に出す
+      line.innerHTML = "予想配当利回り <b>" + (fdiv / price * 100).toFixed(2) + "%</b>(会社予想の1株配当 " + fdiv + "円 ÷ 株価 " +
+        price.toLocaleString("ja-JP") + "円" + when + ")" +
+        (div > 0 ? "<br>実績配当利回り " + (div / price * 100).toFixed(2) + "%(前期の1株配当 " + div + "円)" +
+          (fdiv > div * 1.005 ? " → 今期は" + ((fdiv / div - 1) * 100).toFixed(1) + "%の増配予想" : fdiv < div * 0.995 ? " → 今期は減配予想" : " → 今期は据え置き予想") : "") +
+        (a && a.code === code && a.rec ? perLine(a.rec, price) : "");
+    } else if (div > 0 && price > 0) {
       line.innerHTML = "実績配当利回り <b>" + (div / price * 100).toFixed(2) + "%</b>(前期の1株配当 " + div + "円 ÷ 株価 " +
-        price.toLocaleString("ja-JP") + "円" + (saved && saved.d ? "・" + saved.d.slice(5).replace("-", "/") + "に入力" : "") + ")" +
+        price.toLocaleString("ja-JP") + "円" + when + ")" +
         perLine(a.rec, price) +
-        '<br><small>会社予想ではなく前期の実績で計算しています(株式分割は今の株数に割り戻し済み)。予想で計算する他のサイトとは少し違うことがあります。</small>';
+        '<br><small>前期の実績で計算しています(株式分割は今の株数に割り戻し済み)。Yahoo!ファイナンスなどの配当利回りは会社予想なので、「予想配当」に会社予想の1株配当を入れると同じ値になります。</small>';
     } else if (price > 0 && a && a.code === code && a.rec) {
       // 無配の会社でも PER は出す
       line.innerHTML = perLine(a.rec, price).replace(/^<br>/, "");
@@ -1684,7 +1699,9 @@
     codeTimer = setTimeout(function () {
       if (state.auto && state.auto.code === code) return;
       var known = loadPrices()[code];
-      state.subject.price = known ? String(known.p) : "";
+      state.subject.price = known && known.p ? String(known.p) : "";
+      state.subject.fdiv = known && known.f ? String(known.f) : "";
+      document.getElementById("subjFDiv").value = state.subject.fdiv;
       setAutoStatus("有価証券報告書のデータを読み込んでいます…", false);
       applyAuto(code, true);
     }, 300);
@@ -1701,7 +1718,7 @@
   document.getElementById("subjPrice").addEventListener("input", function (e) {
     var raw = parsePrice(e.target.value);
     state.subject.price = raw;
-    storePrice(curCode(), parseFloat(raw));
+    storePrice(curCode(), parseFloat(raw) || 0);
     renderPriceTools();
     var a = state.auto;
     if (a && a.ev && a.ev.pbr) {
@@ -1727,8 +1744,15 @@
     document.getElementById("subjCode").value = state.subject.code || "";
     document.getElementById("subjName").value = state.subject.name || "";
     document.getElementById("subjPrice").value = state.subject.price || "";
+    document.getElementById("subjFDiv").value = state.subject.fdiv || "";
     renderPriceTools();
   }
+  document.getElementById("subjFDiv").addEventListener("input", function (e) {
+    var raw = parsePrice(e.target.value);
+    state.subject.fdiv = raw;
+    storePrice(curCode(), undefined, parseFloat(raw) || 0);
+    renderPriceTools(); save();
+  });
 
   ["subjCode", "subjName"].forEach(function (id) {
     document.getElementById(id).addEventListener("input", function (e) {
@@ -1745,17 +1769,18 @@
   // なければ有価証券報告書から採点する
   function prepareFromCode(code, price) {
     var fromLink = null;
-    if (!(price > 0)) { var kp = loadPrices()[code]; if (kp) price = kp.p; }
+    var kp = loadPrices()[code], fdiv = kp && kp.f ? String(kp.f) : "";
+    if (!(price > 0)) { if (kp && kp.p) price = kp.p; }
     else storePrice(code, price);
     var last = state.saved.filter(function (x) { return (x.code || "").trim().toUpperCase() === code; }).pop();
     if (last) {
-      state.subject = { code: code, name: last.name || "", price: price > 0 ? String(price) : "" };
+      state.subject = { code: code, name: last.name || "", price: price > 0 ? String(price) : "", fdiv: fdiv };
       state.values = Object.assign({}, last.values);
       state.auto = null;
       save();
       fromLink = { code: code, overwrite: false, msg: last.date + " に保存した評価を開きました。" };
     } else if ((state.subject.code || "").trim().toUpperCase() !== code) {
-      state.subject = { code: code, name: "", price: price > 0 ? String(price) : "" };
+      state.subject = { code: code, name: "", price: price > 0 ? String(price) : "", fdiv: fdiv };
       state.values = {};
       state.auto = null;
       save();
@@ -1838,7 +1863,9 @@
   function today() { var d = new Date(); return d.getFullYear() + "-" + ("0" + (d.getMonth() + 1)).slice(-2) + "-" + ("0" + d.getDate()).slice(-2); }
   function storePrice(code, p) {
     prices = loadPrices();
-    if (p > 0) prices[code] = { p: p, d: today() }; else delete prices[code];
+    var f = prices[code] && prices[code].f;  // チェックで入れた予想配当は残す
+    if (p > 0) prices[code] = f ? { p: p, d: today(), f: f } : { p: p, d: today() };
+    else if (f) prices[code] = { f: f }; else delete prices[code];
     try { localStorage.setItem(PRICE_KEY, JSON.stringify(prices)); } catch (e) {}
     if (window.HaitoSync) window.HaitoSync.soon();
   }
@@ -1846,13 +1873,14 @@
     var m = String(t || "").normalize("NFKC").replace(/[,\s円]/g, "").match(/\d+(\.\d+)?/);
     return m ? +m[0] : 0;
   }
+  // 予想配当を入れてある会社は会社予想、なければ前期の実績で
   function yieldOf(r) {
-    var pr = prices[r.c], d = r.d && r.d[r.d.length - 1];
+    var pr = prices[r.c], d = pr && pr.f > 0 ? pr.f : r.d && r.d[r.d.length - 1];
     return pr && pr.p > 0 && d > 0 ? d / pr.p * 100 : null;
   }
   function yieldText(r) {
     var y = yieldOf(r), pr = prices[r.c];
-    return y == null ? "" : '実績配当利回り <b>' + y.toFixed(2) + '%</b>(前期の配当 ÷ ' + pr.d.slice(5).replace("-", "/") + 'に入れた株価 ' + pr.p.toLocaleString("ja-JP") + '円)';
+    return y == null ? "" : (pr.f > 0 ? "予想" : "実績") + '配当利回り <b>' + y.toFixed(2) + '%</b>(' + (pr.f > 0 ? "予想配当 " + pr.f + "円" : "前期の配当") + ' ÷ ' + pr.d.slice(5).replace("-", "/") + 'に入れた株価 ' + pr.p.toLocaleString("ja-JP") + '円)';
   }
   var rows = [], shown = PAGE, pol = "";
   var $ = function (id) { return document.getElementById(id); };
@@ -1918,7 +1946,7 @@
       (r.q && r.q.length ? '<details class="quote"><summary>有報の配当政策(根拠の文)</summary>' +
         r.q.map(function (t) { return '<q>' + esc(t.replace(/^[0-9０-９]*【配当政策】/, "")) + '</q>'; }).join("") + '</details>' : '') +
       '<div class="price-row" data-code="' + esc(r.c) + '">' +
-        '<input type="text" inputmode="decimal" autocomplete="off" placeholder="株価" aria-label="株価" value="' + (prices[r.c] ? prices[r.c].p : "") + '">' +
+        '<input type="text" inputmode="decimal" autocomplete="off" placeholder="株価" aria-label="株価" value="' + (prices[r.c] && prices[r.c].p ? prices[r.c].p : "") + '">' +
         '<button type="button" class="paste">📋 貼り付け</button>' +
         '<a href="https://finance.yahoo.co.jp/quote/' + encodeURIComponent(r.c) + '.T" target="_blank" rel="noopener noreferrer">株価を見てコピー ↗</a>' +
         '<span class="yld">' + yieldText(r) + '</span></div>' +
