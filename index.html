@@ -328,6 +328,18 @@
   .bars-x { display: flex; gap: 2px; margin-top: 4px; }
   .bars-x span { flex: 1; text-align: center; font-size: 10px; color: var(--muted); white-space: nowrap; font-variant-numeric: tabular-nums; }
   .trend .readout-line { font-size: 12px; color: var(--text-2); margin: 6px 0 0; min-height: 1.6em; font-variant-numeric: tabular-nums; }
+  .eps-line { display: block; width: 100%; height: 96px; margin-top: 6px; overflow: visible; }
+  .eps-line .grid { stroke: var(--grid); stroke-width: 1; }
+  .eps-line .zero { stroke: var(--line); stroke-width: 1; }
+  .eps-line .ln { fill: none; stroke: var(--text-2); stroke-width: 2; stroke-linejoin: round; stroke-linecap: round; vector-effect: non-scaling-stroke; }
+  .eps-row { display: flex; gap: 2px; margin-top: -96px; height: 96px; position: relative; }
+  .eps-row .pt { flex: 1; position: relative; background: none; border: 0; padding: 0; cursor: pointer; }
+  .eps-row .pt i { position: absolute; left: 50%; width: 10px; height: 10px; margin: -5px 0 0 -5px; border-radius: 50%;
+    background: var(--text-2); box-shadow: 0 0 0 2px var(--card); }
+  .eps-row .pt i.is-neg { background: var(--muted); }
+  .eps-row .pt.is-on i { box-shadow: 0 0 0 2px var(--card), 0 0 0 4px var(--text); }
+  .eps-row .pt b { position: absolute; left: 50%; transform: translateX(-50%); font-size: 10.5px; color: var(--text); white-space: nowrap; font-variant-numeric: tabular-nums; }
+  .sub-h { font-size: 12px; font-weight: 700; margin: 12px 0 0; color: var(--text-2); }
   .trend .key { font-size: 11px; color: var(--text-2); margin: 4px 0 0; }
   .trend .key i { display: inline-block; width: 9px; height: 9px; border-radius: 2px; background: var(--bad); margin: 0 4px 0 0; vertical-align: -1px; }
   .sync-box { margin: 16px 0 0; background: var(--field); border-radius: 12px; padding: 12px 14px; font-size: 13px; line-height: 1.8; }
@@ -1274,6 +1286,39 @@
     for (var i = 0; i < steps.length; i++) if (steps[i] * p >= max) return steps[i] * p;
     return 10 * p;
   }
+  // 配当性向(棒)の真下に、同じ期の位置で1株利益(折れ線)を並べる。縦軸はそれぞれ1本ずつ
+  function payoutEpsChart(labels, po, eps) {
+    var wrap = barChart("配当性向と1株利益(EPS)", "上: 配当性向(%)= 1株配当 ÷ 1株利益。赤字の期は0 / 下: 1株利益(円)", labels, po, { unit: "%" });
+    // 折れ線は0から始めなくてよいので、値の幅に合わせる(赤字の期があるときだけ0を含める)
+    var n = eps.length, mn = Math.min.apply(null, eps), mx = Math.max.apply(null, eps);
+    var lo = mn < 0 ? mn : mn - (mx - mn) * 0.25, hi = mx < 0 ? 0 : mx;
+    if (lo === hi) { lo -= Math.abs(lo) * 0.1 || 1; hi += Math.abs(hi) * 0.1 || 1; }
+    var span = hi - lo, H = 96, pad = 22;
+    function y(v) { return pad + (hi - v) / span * (H - pad * 2); }
+    var pts = eps.map(function (v, i) { return ((i + 0.5) / n * 100).toFixed(2) + "," + y(v).toFixed(1); }).join(" ");
+    var svg = '<svg class="eps-line" viewBox="0 0 100 ' + H + '" preserveAspectRatio="none" aria-hidden="true">' +
+      (lo < 0 ? '<line class="zero" x1="0" x2="100" y1="' + y(0) + '" y2="' + y(0) + '"/>' : "") +
+      '<line class="grid" x1="0" x2="100" y1="' + y(lo + span / 2) + '" y2="' + y(lo + span / 2) + '"/>' +
+      '<polyline class="ln" points="' + pts + '"/></svg>';
+    var row = '<div class="eps-row">' + eps.map(function (v, i) {
+      var cap = i === n - 1 ? '<b style="top:' + (y(v) - 20) + 'px">' + fmtNum(v, "円") + "</b>" : "";
+      return '<button type="button" class="pt" data-i="' + i + '" aria-label="' + labels[i] + " 1株利益 " + fmtNum(v, "円") + '">' + cap +
+        '<i class="' + (v <= 0 ? "is-neg" : "") + '" style="top:' + y(v) + 'px"></i></button>';
+    }).join("") + "</div>";
+    var x = wrap.querySelector(".bars-x");
+    x.insertAdjacentHTML("beforebegin", '<p class="sub-h">1株利益(円)<span style="font-weight:400;color:var(--muted)">(目盛りの線は ' + fmtNum(lo + span / 2, "円") + ')</span></p>' + svg + row);
+    var line = wrap.querySelector(".readout-line");
+    line.textContent = "棒か点を押すと、その期の値が出ます。";
+    function show(i) {
+      Array.prototype.forEach.call(wrap.querySelectorAll(".col,.pt"), function (c) { c.classList.toggle("is-on", +c.dataset.i === i); });
+      line.textContent = labels[i] + "期 配当性向 " + fmtNum(po[i], "%") + " ・ 1株利益 " + fmtNum(eps[i], "円") +
+        (i > 0 && eps[i - 1] > 0 && eps[i] > 0 ? "(前の期から " + (eps[i] >= eps[i - 1] ? "+" : "") + ((eps[i] / eps[i - 1] - 1) * 100).toFixed(1) + "%)" : "");
+    }
+    ["click", "mouseover"].forEach(function (ev) {
+      wrap.addEventListener(ev, function (e) { var c = e.target.closest(".col,.pt"); if (c) { e.stopPropagation(); show(+c.dataset.i); } }, true);
+    });
+    return wrap;
+  }
   function renderTrends() {
     var panel = document.getElementById("trendPanel"), box = document.getElementById("trends");
     var a = state.auto, code = (state.subject.code || "").trim().toUpperCase();
@@ -1284,15 +1329,14 @@
     box.innerHTML = "";
     box.appendChild(barChart("1株配当", "期ごとの年間配当(円)。赤は前の期より減った期", fyLabels(rec.fy, dps.length), dps, { unit: "円", downMark: true }));
     var eps = rec.eps, div = rec.div;
-    if (eps && eps.length >= 2) {
-      var pair = document.createElement("div");
-      pair.className = "trend-pair";
-      pair.appendChild(barChart("1株利益(EPS)", "期ごとの1株あたり純利益(円)。灰色は赤字", fyLabels(rec.fy, eps.length), eps, { unit: "円" }));
-      if (div && div.length === eps.length) {
-        var po = eps.map(function (e, i) { return e > 0 && div[i] != null ? div[i] / e * 100 : 0; });
-        pair.appendChild(barChart("配当性向", "1株配当 ÷ 1株利益(%)。赤字の期は0", fyLabels(rec.fy, po.length), po, { unit: "%" }));
-      }
-      box.appendChild(pair);
+    // 1株配当と1株利益で期の数が違う会社(分割の年を外した等)は、新しい期の方からそろえる
+    var k = eps && div ? Math.min(eps.length, div.length) : 0;
+    if (k >= 2) {
+      var e2 = eps.slice(-k), d2 = div.slice(-k);
+      var po = e2.map(function (e, i) { return e > 0 && d2[i] != null ? d2[i] / e * 100 : 0; });
+      box.appendChild(payoutEpsChart(fyLabels(rec.fy, k), po, e2));
+    } else if (eps && eps.length >= 2) {
+      box.appendChild(barChart("1株利益(EPS)", "期ごとの1株あたり純利益(円)。灰色は赤字", fyLabels(rec.fy, eps.length), eps, { unit: "円" }));
     }
   }
 
