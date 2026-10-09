@@ -36,6 +36,7 @@
     --ok: #2563eb;     --ok-soft: #eaf1fe;
     --mid: #d97706;    --mid-soft: #fdf2e3;
     --bad: #dc2626;    --bad-soft: #fdecec;
+    --chart: #2563eb;  --grid: #e9ecf2;
     --radius: 14px;
     --radius-lg: 22px;
     --shadow: 0 6px 18px rgba(35,48,74,.06);
@@ -56,6 +57,7 @@
       --ok: #7aa7f7;    --ok-soft: #1d2531;
       --mid: #f0b357;   --mid-soft: #302619;
       --bad: #f87171;   --bad-soft: #331e1e;
+      --chart: #5b8def; --grid: #2a2e35;
       --shadow: 0 6px 18px rgba(0,0,0,.28);
     }
   }
@@ -307,6 +309,27 @@
   .price-row .yld b { color: var(--text); font-size: 15px; }
   .price-row.is-waiting button.paste { border-color: var(--accent); color: var(--accent); font-weight: 700; animation: pulse 1.2s ease-in-out 3; }
   @keyframes pulse { 50% { box-shadow: 0 0 0 6px var(--accent-soft); } }
+  /* 配当・利益の推移(1つのグラフに1系列・縦軸1本) */
+  .trends { display: grid; gap: 18px; }
+  .trend h3 { margin: 0 0 2px; font-size: 13.5px; }
+  .trend .sub { font-size: 11.5px; color: var(--muted); margin: 0 0 8px; }
+  .trend-pair { display: grid; grid-template-columns: 1fr 1fr; gap: 18px; }
+  @media (max-width: 520px) { .trend-pair { grid-template-columns: 1fr; } }
+  .bars { position: relative; display: flex; align-items: flex-end; gap: 2px; height: 120px; padding-top: 16px;
+    border-bottom: 1px solid var(--line);
+    background: linear-gradient(to top, transparent calc(50% - .5px), var(--grid) calc(50% - .5px), var(--grid) calc(50% + .5px), transparent calc(50% + .5px)); }
+  .bars .col { flex: 1; height: 100%; display: flex; flex-direction: column; justify-content: flex-end; align-items: center;
+    background: none; border: 0; padding: 0; cursor: pointer; font: inherit; color: inherit; position: relative; }
+  .bars .bar { width: 100%; max-width: 24px; background: var(--chart); border-radius: 4px 4px 0 0; min-height: 2px; }
+  .bars .bar.is-down { background: var(--bad); }
+  .bars .bar.is-neg { background: var(--muted); }
+  .bars .cap { position: absolute; top: -2px; font-size: 10.5px; font-weight: 700; color: var(--text); white-space: nowrap; font-variant-numeric: tabular-nums; }
+  .bars .col.is-on .bar { outline: 2px solid var(--text); outline-offset: 1px; }
+  .bars-x { display: flex; gap: 2px; margin-top: 4px; }
+  .bars-x span { flex: 1; text-align: center; font-size: 10px; color: var(--muted); white-space: nowrap; font-variant-numeric: tabular-nums; }
+  .trend .readout-line { font-size: 12px; color: var(--text-2); margin: 6px 0 0; min-height: 1.6em; font-variant-numeric: tabular-nums; }
+  .trend .key { font-size: 11px; color: var(--text-2); margin: 4px 0 0; }
+  .trend .key i { display: inline-block; width: 9px; height: 9px; border-radius: 2px; background: var(--bad); margin: 0 4px 0 0; vertical-align: -1px; }
   .sync-box { margin: 16px 0 0; background: var(--field); border-radius: 12px; padding: 12px 14px; font-size: 13px; line-height: 1.8; }
   .sync-box p { margin: 0 0 8px; color: var(--text-2); }
   .sync-box .st { font-weight: 700; color: var(--text); }
@@ -429,6 +452,11 @@
       <span id="autoStatusText"></span>
       <button type="button" class="btn-link" id="rescoreBtn">有報の値で採点し直す</button>
     </div>
+  </section>
+
+  <section class="panel" data-view="check" id="trendPanel" hidden>
+    <h2>配当と利益の推移 <span class="hint">有価証券報告書の実績。株式分割は今の株数に割り戻し済み</span></h2>
+    <div class="trends" id="trends"></div>
   </section>
 
   <section class="panel" data-view="check">
@@ -1198,7 +1226,77 @@
     };
   }
 
+  // ---------- 配当と利益の推移 ----------
+  // 1株配当(最大14期)・1株利益(5期)・配当性向(5期)を、それぞれ1本の縦軸のグラフで出す
+  function fyLabels(fy, n) {
+    var y = +fy.slice(0, 4), m = +fy.slice(5, 7), out = [];
+    for (var i = n - 1; i >= 0; i--) out.push(String(y - i).slice(2) + "/" + m);
+    return out;
+  }
+  function fmtNum(v, unit) {
+    if (unit === "%") return v.toFixed(1) + "%";
+    return (Math.abs(v) >= 100 ? Math.round(v).toLocaleString("ja-JP") : (Math.round(v * 100) / 100).toLocaleString("ja-JP")) + unit;
+  }
+  // vals: 古い順。opts: {unit, downMark(前の期より減ったら赤), capLast}
+  function barChart(title, sub, labels, vals, opts) {
+    var wrap = document.createElement("div");
+    wrap.className = "trend";
+    var max = Math.max.apply(null, vals.map(function (v) { return v > 0 ? v : 0; }).concat([0]));
+    var top = max > 0 ? niceTop(max) : 1;
+    var cols = vals.map(function (v, i) {
+      var down = opts.downMark && i > 0 && vals[i - 1] > 0 && v < vals[i - 1] - 0.005;
+      var h = v > 0 ? Math.max(2, v / top * 100) : 2;
+      var cap = i === vals.length - 1 ? '<span class="cap" style="bottom:calc(' + h + '% + 3px);top:auto">' + fmtNum(v, opts.unit) + "</span>" : "";
+      return '<button type="button" class="col" data-i="' + i + '" aria-label="' + labels[i] + " " + fmtNum(v, opts.unit) + (down ? " 前の期より減少" : "") + '">' +
+        cap + '<span class="bar' + (down ? " is-down" : v <= 0 ? " is-neg" : "") + '" style="height:' + h + '%"></span></button>';
+    }).join("");
+    var every = vals.length > 8 ? 2 : 1;
+    var xs = labels.map(function (l, i) { return "<span>" + ((vals.length - 1 - i) % every === 0 ? l : "") + "</span>"; }).join("");
+    var hasDown = opts.downMark && vals.some(function (v, i) { return i > 0 && vals[i - 1] > 0 && v < vals[i - 1] - 0.005; });
+    wrap.innerHTML = "<h3>" + title + "</h3><p class=\"sub\">" + sub + "(目盛りの線は " + fmtNum(top / 2, opts.unit) + ")</p>" +
+      '<div class="bars">' + cols + '</div><div class="bars-x">' + xs + "</div>" +
+      (hasDown ? '<p class="key"><i></i>前の期より減った期</p>' : "") +
+      '<p class="readout-line">棒を押すと、その期の値が出ます。</p>';
+    var line = wrap.querySelector(".readout-line");
+    function show(i) {
+      Array.prototype.forEach.call(wrap.querySelectorAll(".col"), function (c) { c.classList.toggle("is-on", +c.dataset.i === i); });
+      var prev = i > 0 ? vals[i - 1] : null, v = vals[i];
+      line.textContent = labels[i] + "期 " + fmtNum(v, opts.unit) +
+        (prev != null && prev > 0 && v > 0 ? "(前の期から " + (v >= prev ? "+" : "") + ((v / prev - 1) * 100).toFixed(1) + "%)" : "");
+    }
+    wrap.querySelector(".bars").addEventListener("click", function (e) { var c = e.target.closest(".col"); if (c) show(+c.dataset.i); });
+    wrap.querySelector(".bars").addEventListener("mouseover", function (e) { var c = e.target.closest(".col"); if (c) show(+c.dataset.i); });
+    return wrap;
+  }
+  function niceTop(max) {
+    var p = Math.pow(10, Math.floor(Math.log10(max))), steps = [1, 1.2, 1.5, 2, 2.5, 3, 4, 5, 6, 8, 10];
+    for (var i = 0; i < steps.length; i++) if (steps[i] * p >= max) return steps[i] * p;
+    return 10 * p;
+  }
+  function renderTrends() {
+    var panel = document.getElementById("trendPanel"), box = document.getElementById("trends");
+    var a = state.auto, code = (state.subject.code || "").trim().toUpperCase();
+    var rec = a && a.rec && a.code === code ? a.rec : null;
+    var dps = rec && (rec.dl && rec.dl.length >= (rec.div || []).length ? rec.dl : rec.div);
+    if (!rec || !rec.fy || !dps || dps.length < 2) { panel.hidden = true; return; }
+    panel.hidden = false;
+    box.innerHTML = "";
+    box.appendChild(barChart("1株配当", "期ごとの年間配当(円)。赤は前の期より減った期", fyLabels(rec.fy, dps.length), dps, { unit: "円", downMark: true }));
+    var eps = rec.eps, div = rec.div;
+    if (eps && eps.length >= 2) {
+      var pair = document.createElement("div");
+      pair.className = "trend-pair";
+      pair.appendChild(barChart("1株利益(EPS)", "期ごとの1株あたり純利益(円)。灰色は赤字", fyLabels(rec.fy, eps.length), eps, { unit: "円" }));
+      if (div && div.length === eps.length) {
+        var po = eps.map(function (e, i) { return e > 0 && div[i] != null ? div[i] / e * 100 : 0; });
+        pair.appendChild(barChart("配当性向", "1株配当 ÷ 1株利益(%)。赤字の期は0", fyLabels(rec.fy, po.length), po, { unit: "%" }));
+      }
+      box.appendChild(pair);
+    }
+  }
+
   function renderTally() {
+    renderTrends();
     var s = summarize();
     var el = document.getElementById("tally");
     el.innerHTML =
