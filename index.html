@@ -1777,6 +1777,8 @@
       navigator.clipboard.readText().then(function (t) {
         var blk = t && t.length > 40 ? parseQuoteBlock(t) : null;
         if (blk) { applyQuoteBlock(blk); return; }
+        // 長い文字なのに参考指標として読めないときは、最初の数字(時価総額など)を株価にしない
+        if (t && t.length > 40) { setStatus("コピーした内容から株価・予想配当を読み取れませんでした(" + t.length + "文字)。参考指標の見出しから単元株数までを選んでコピーし直してください。"); return; }
         var p = parsePrice(t);
         if (p) setPrice(p); else { input.focus(); setStatus("コピーした内容に株価が見つかりませんでした。"); }
       }, function () { input.focus(); setStatus("株価の欄を長押しして貼り付けてください。"); });
