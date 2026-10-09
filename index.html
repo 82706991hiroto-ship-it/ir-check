@@ -307,6 +307,13 @@
   .price-row .yld b { color: var(--text); font-size: 15px; }
   .price-row.is-waiting button.paste { border-color: var(--accent); color: var(--accent); font-weight: 700; animation: pulse 1.2s ease-in-out 3; }
   @keyframes pulse { 50% { box-shadow: 0 0 0 6px var(--accent-soft); } }
+  .sync-box { margin: 16px 0 0; background: var(--field); border-radius: 12px; padding: 12px 14px; font-size: 13px; line-height: 1.8; }
+  .sync-box p { margin: 0 0 8px; color: var(--text-2); }
+  .sync-box .st { font-weight: 700; color: var(--text); }
+  .sync-box .st.is-on { color: var(--accent); }
+  .sync-box .st.is-err { color: #d23b3b; }
+  .sync-box input { width: 100%; box-sizing: border-box; font: 15px ui-monospace, Menlo, monospace; padding: 8px 10px; border-radius: 8px; border: 1px solid var(--line); background: var(--card); color: var(--text); text-transform: uppercase; }
+  .sync-box .toolbar { margin-top: 8px; display: flex; gap: 8px; flex-wrap: wrap; }
   .toast { position: fixed; left: 16px; right: 16px; bottom: 20px; max-width: 520px; margin: 0 auto; background: var(--text); color: var(--card);
     font-size: 13px; padding: 12px 16px; border-radius: 12px; box-shadow: var(--shadow); z-index: 10; }
   .more { display: block; width: 100%; margin-top: 12px; font: inherit; font-size: 14px; padding: 12px; border-radius: 12px;
@@ -457,6 +464,7 @@
         <tbody id="savedBody"></tbody>
       </table>
     </div>
+    <div class="sync-box" id="syncBox" hidden></div>
     <p class="hint">保存した評価と採点の控えは、<a href="../haito-dashboard/">HAITO</a>の「保有銘柄」タブの「JSONエクスポート」に一緒に入ります。端末を移すときも、HAITOで読み込めば戻ります。</p>
   </section>
 
@@ -493,6 +501,8 @@
   <button class="tab" role="tab" data-tab="saved" id="tab-saved"><svg viewBox="0 0 24 24"><path d="M6.5 3.5h11v17l-5.5-4-5.5 4z"/></svg><span>保存</span></button>
   <a class="tab ext" href="../haito-dashboard/"><svg viewBox="0 0 24 24"><path d="M4 19.5h16"/><path d="M7 16V11M12 16V7M17 16v-3"/></svg><span>HAITO ↗</span></a>
 </nav>
+<script src="../haito-dashboard/sync-config.js"></script>
+<script src="../haito-dashboard/sync-core.js"></script>
 <script>
 (function () {
   "use strict";
@@ -928,6 +938,7 @@
 
   function save() {
     try { localStorage.setItem(STORAGE_KEY, JSON.stringify(state)); } catch (e) {}
+    if (window.HaitoSync) window.HaitoSync.soon();
   }
 
   // 自動採点した銘柄の業種(コードを変えたら外れる)
@@ -1497,6 +1508,7 @@
     var all = loadPrices();
     if (p > 0) all[code] = { p: +p, d: todayStamp() }; else delete all[code];
     try { localStorage.setItem(PRICE_KEY, JSON.stringify(all)); } catch (e) {}
+    if (window.HaitoSync) window.HaitoSync.soon();
   }
   function curCode() { return (state.subject.code || "").trim().toUpperCase(); }
   function renderPriceTools() {
@@ -1681,6 +1693,12 @@
     b.addEventListener("click", function () { setTab(b.dataset.tab); });
   });
 
+  // ほかの端末との同期やHAITOのタブで中身が入れ替わったとき、保存された内容を読み直す
+  window.irReloadFromStorage = function () {
+    state = loadState();
+    renderSubject(); renderItems(); renderTally(); renderSaved(); renderPriceTools();
+  };
+
   renderSubject();
   renderItems();
   renderTally();
@@ -1713,6 +1731,7 @@
     prices = loadPrices();
     if (p > 0) prices[code] = { p: p, d: today() }; else delete prices[code];
     try { localStorage.setItem(PRICE_KEY, JSON.stringify(prices)); } catch (e) {}
+    if (window.HaitoSync) window.HaitoSync.soon();
   }
   function parsePrice(t) {
     var m = String(t || "").normalize("NFKC").replace(/[,\s円]/g, "").match(/\d+(\.\d+)?/);
@@ -1811,6 +1830,7 @@
     $("more").textContent = "もっと見る(残り" + (list.length - shown) + "社)";
   }
   function reset() { shown = PAGE; render(); }
+  window.irFindReloadPrices = function () { prices = loadPrices(); if (rows.length) render(); };
 
   Array.prototype.forEach.call(document.querySelectorAll("#polSeg button"), function (b) {
     b.addEventListener("click", function () {
@@ -1910,6 +1930,58 @@
   });
   // 最初から探すタブで開いたとき(先に読み込まれる本体からは、まだ呼べない)
   if (document.body.dataset.tab === "find") window.irLoadFind();
+})();
+</script>
+<script>
+// ---------- ほかの端末と同期(中身は HAITO の sync-core.js。同期コードは HAITO と共通) ----------
+(function () {
+  "use strict";
+  var S = window.HaitoSync;
+  var box = document.getElementById("syncBox");
+  if (!S || !S.configured() || !box) return;
+  function toast(msg) {
+    var t = document.createElement("div"); t.className = "toast"; t.textContent = msg;
+    document.body.appendChild(t); setTimeout(function () { t.remove(); }, 3500);
+  }
+  function reload() {
+    if (window.irReloadFromStorage) window.irReloadFromStorage();
+    if (window.irFindReloadPrices) window.irFindReloadPrices();
+  }
+  function render() {
+    box.hidden = false;
+    if (S.code()) {
+      var m = S.meta(), err = S.status.error;
+      box.innerHTML = '<p><span class="st ' + (err ? "is-err" : "is-on") + '">ほかの端末と同期: ' +
+        (err ? err : "オン" + (m.at ? "・" + new Date(m.at).toLocaleTimeString("ja-JP", { hour: "2-digit", minute: "2-digit" }) + " に同期" : "")) +
+        '</span><br>保存した評価・採点・株価は、HAITOの保有銘柄と一緒に、同じ同期コードの端末へ自動で送られます。同期コードの表示や同期をやめる操作は<a href="../haito-dashboard/#holdings">HAITO</a>の「保有銘柄」タブにあります。</p>' +
+        '<div class="toolbar"><button class="btn" type="button" data-sync="now">今すぐ同期</button></div>';
+    } else {
+      box.innerHTML = '<p><span class="st">ほかの端末と同期: オフ</span><br>' +
+        '<a href="../haito-dashboard/#holdings">HAITO</a>の「保有銘柄」タブで同期を始めた端末の同期コードを入れると、保存した評価もほかの端末とそろいます。' +
+        '<b>この端末のチェックシートとHAITOの内容は、同期先の内容に置き換わります。</b></p>' +
+        '<input id="syncCodeIn" autocomplete="off" autocapitalize="characters" spellcheck="false" placeholder="XXXX-XXXX-…">' +
+        '<div class="toolbar"><button class="btn primary" type="button" data-sync="join">つなぐ</button></div>';
+    }
+  }
+  box.addEventListener("click", function (e) {
+    var b = e.target.closest("[data-sync]");
+    if (!b) return;
+    if (b.dataset.sync === "now") { S.syncNow(true); return; }
+    var c = S.norm(document.getElementById("syncCodeIn").value);
+    if (c.length !== 26) { alert("同期コードは26文字です(ハイフンは入れても入れなくてもかまいません)。"); return; }
+    b.disabled = true;
+    S.peek(c).then(function (remote) {
+      if (!remote) { b.disabled = false; alert("この同期コードのデータが見つかりません。コードを確かめてください。"); return; }
+      if (!confirm("この端末のチェックシートとHAITOの内容は、同期先の内容に置き換わります。よろしいですか？")) { b.disabled = false; return; }
+      S.adopt(c, remote);
+      render(); toast("同期をつなぎました");
+    }).catch(function (err) {
+      b.disabled = false;
+      alert(err && err.message === "decrypt" ? "同期コードが合いません。" : "つながりませんでした。通信状態を確かめてください。");
+    });
+  });
+  render();
+  S.init({ onApplied: reload, onExternal: reload, onStatus: render, toast: toast });
 })();
 </script>
 </body>
