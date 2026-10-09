@@ -318,8 +318,9 @@ def recent_filings(days):
     return by
 
 
-def code_list():
-    """EDINETコードリストから {証券コード4桁: (提出者名, 業種)}。取れなければ空。"""
+def code_list(listed_only=False):
+    """EDINETコードリストから {証券コード4桁: (提出者名, 業種)}。取れなければ空。
+    listed_only なら上場区分が「上場」の会社だけ(上場をやめた会社を足さないため)。"""
     r = get(CODELIST, auth=False, tries=3)
     if r is None or r.content[:2] != b"PK":
         print("EDINETコードリストを取得できませんでした。新規の会社は社名・業種が分からないので来月に回します")
@@ -329,10 +330,12 @@ def code_list():
     rows = list(csv.reader(io.StringIO(text)))
     head = next(i for i, r in enumerate(rows) if "証券コード" in r)
     h = rows[head]
-    ic, iname, isec = h.index("証券コード"), h.index("提出者名"), h.index("提出者業種")
+    ic, iname, isec, il = h.index("証券コード"), h.index("提出者名"), h.index("提出者業種"), h.index("上場区分")
     out = {}
     for r in rows[head + 1:]:
-        if len(r) > max(ic, iname, isec) and r[ic].strip():
+        if len(r) > max(ic, iname, isec, il) and r[ic].strip():
+            if listed_only and r[il].strip() != "上場":
+                continue
             out[r[ic].strip()[:4].upper()] = (r[iname].strip(), r[isec].strip())
     return out
 
@@ -461,18 +464,18 @@ def write_policy(fin):
     return len(rows)
 
 
-def cmd_update(days):
+def cmd_update(days, only_missing=False):
     fin = load_fin()
     filings = recent_filings(days)
     todo = []
     for code, x in filings.items():
         old = fin.get(code[0], {}).get(code)
-        if old and old.get("fy", "") >= x["periodEnd"]:
+        if old and (only_missing or old.get("fy", "") >= x["periodEnd"]):
             continue
         todo.append((code, x))
     print("有報", len(filings), "件のうち、期が新しい会社", len(todo), "件", flush=True)
     todo = [(c, x) for c, x in todo if re.match(r"^[1-9][0-9A-Z]{3}$", c)]
-    names = code_list() if any(not fin.get(c[0], {}).get(c) for c, _ in todo) else {}
+    names = code_list(listed_only=only_missing) if any(not fin.get(c[0], {}).get(c) for c, _ in todo) else {}
     if not names:
         todo = [(c, x) for c, x in todo if fin.get(c[0], {}).get(c)]
     changed = []
@@ -510,11 +513,13 @@ def main():
     lg.add_argument("--haito", required=True, help="haito-dashboard の index.html")
     u = sub.add_parser("update")
     u.add_argument("--days", type=int, default=45)
+    u.add_argument("--only-missing", action="store_true",
+                   help="まだ無い上場会社(名証・福証・札証だけの会社など)だけ足す。--days 400 で1年分を見る")
     d = sub.add_parser("doc")
     d.add_argument("doc_id")
     a = ap.parse_args()
     if a.cmd == "update":
-        cmd_update(a.days)
+        cmd_update(a.days, a.only_missing)
     elif a.cmd == "policy":
         print(write_policy(load_fin()))
     elif a.cmd == "longdiv":

@@ -9,6 +9,9 @@ on:
       days:
         description: "何日前までの提出を見るか"
         default: "45"
+      only_missing:
+        description: "まだ無い上場会社(名証・福証・札証だけの会社など)だけ足す(true のとき。days は 400 に)"
+        default: "false"
 permissions:
   contents: write
   pages: write
@@ -26,7 +29,12 @@ jobs:
       - name: 有報で自動採点の数字を更新
         env:
           EDINET_API_KEY: ${{ secrets.EDINET_API_KEY }}
-        run: python3 tools/edinet_fin.py update --days "${{ inputs.days || '45' }}"
+        run: |
+          if [ "${{ inputs.only_missing }}" = "true" ]; then
+            python3 tools/edinet_fin.py update --days "${{ inputs.days || '400' }}" --only-missing
+          else
+            python3 tools/edinet_fin.py update --days "${{ inputs.days || '45' }}"
+          fi
       # HAITO(haito-dashboard)の最大14期の1株配当を、1株配当の長期判定に使う
       - uses: actions/checkout@v4
         with:
