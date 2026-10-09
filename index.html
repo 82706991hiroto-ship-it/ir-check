@@ -347,6 +347,18 @@
   .sub-h { font-size: 12px; font-weight: 700; margin: 12px 0 0; color: var(--text-2); }
   .trend .key { font-size: 11px; color: var(--text-2); margin: 4px 0 0; }
   .trend .key i { display: inline-block; width: 9px; height: 9px; border-radius: 2px; background: var(--bad); margin: 0 4px 0 0; vertical-align: -1px; }
+  .mini { display: flex; align-items: stretch; gap: 14px; margin: 8px 0 4px; }
+  .mini-chart { display: flex; align-items: flex-end; gap: 8px; background: var(--field); border: 0; border-radius: 10px; padding: 8px 10px; cursor: pointer; font: inherit; color: inherit; }
+  .mini-bars { display: flex; align-items: flex-end; gap: 2px; height: 34px; }
+  .mini-bars i { display: block; width: 8px; background: var(--chart); border-radius: 2px 2px 0 0; }
+  .mini-bars i.dn { background: var(--bad); }
+  .mini-cap { display: flex; flex-direction: column; font-size: 10.5px; color: var(--muted); line-height: 1.3; text-align: left; }
+  .mini-cap b { font-size: 13px; color: var(--text); font-variant-numeric: tabular-nums; }
+  .mini-stats { display: flex; gap: 14px; flex-wrap: wrap; align-items: center; }
+  .mini-stats span { display: flex; flex-direction: column; line-height: 1.25; }
+  .mini-stats small { font-size: 10.5px; color: var(--muted); }
+  .mini-stats b { font-size: 15px; font-variant-numeric: tabular-nums; }
+  .mini-more { white-space: pre-line; font-size: 12px; color: var(--text-2); background: var(--field); border-radius: 8px; padding: 8px 10px; margin: 4px 0 0; }
   .copy-tip { display: block; width: 100%; font-size: 11.5px; color: var(--muted); line-height: 1.6; }
   .sync-box { margin: 16px 0 0; background: var(--field); border-radius: 12px; padding: 12px 14px; font-size: 13px; line-height: 1.8; }
   .sync-box p { margin: 0 0 8px; color: var(--text-2); }
@@ -2033,6 +2045,26 @@
     return out;
   }
 
+  // 1株配当5期の小さな棒(減配は赤)と、連続増配・増配率(5年)・配当性向の3つだけ。細かい増配率は棒を押すと出す
+  function miniFacts(r) {
+    var d = r.d || [], mx = Math.max.apply(null, d.concat([0])) || 1;
+    var fy = r.fy ? r.fy.slice(2, 4) + "/" + (+r.fy.slice(5, 7)) + "期" : "";
+    var bars = d.map(function (v, i) {
+      var down = i > 0 && v < d[i - 1] - 0.005;
+      return '<i class="' + (down ? "dn" : "") + '" style="height:' + Math.max(6, v / mx * 100) + '%"></i>';
+    }).join("");
+    var label = "1株配当 " + d.map(yen).join("→") + "円";
+    var g = r.g5y ? r.g5y : 5;
+    var more = "増配率 1年 " + pct(r.g1) + " ・ " + g + "年 " + pct(r.g5, true) + " ・ 10年 " + pct(r.g10, true) + (r.g15 != null ? " ・ 15年 " + pct(r.g15, true) : "");
+    return '<div class="mini">' +
+      (d.length ? '<button type="button" class="mini-chart" aria-label="' + esc(label) + '" data-more="' + esc(label + "\n" + more + "\n" + (r.fy || "").replace("-", "年") + "月期の有報まで") + '">' +
+        '<span class="mini-bars">' + bars + '</span><span class="mini-cap"><b>' + yen(d[d.length - 1]) + '円</b>' + fy + '</span></button>' : "") +
+      '<div class="mini-stats">' +
+        '<span><small>連続増配</small><b>' + (r.up > 0 ? r.up + "期" + (r.upm ? "〜" : "") : "—") + '</b></span>' +
+        '<span><small>増配率(' + g + '年)</small><b>' + (r.g5 != null ? pct(r.g5, true).replace("年", "") : "—") + '</b></span>' +
+        '<span><small>配当性向</small><b>' + (r.po == null ? "—" : r.po + "%") + '</b></span>' +
+      '</div></div><p class="mini-more" hidden></p>';
+  }
   function item(r) {
     var li = document.createElement("li");
     li.className = "co";
@@ -2042,14 +2074,7 @@
       '<div class="co-head"><span class="co-name"><span class="co-code">' + esc(r.c) + '</span>' + esc(r.n.normalize("NFKC")) + '</span>' +
       '<span class="co-sec">' + esc(r.s || "業種不明") + '</span></div>' +
       '<div class="tags">' + tags + '</div>' +
-      '<div class="facts">' +
-        (r.d && r.d.length ? '<span>1株配当 <b>' + r.d.map(yen).join("→") + '円</b></span>' : '') +
-        '<span>配当性向 <b>' + (r.po == null ? "—" : r.po + "%") + '</b></span>' +
-        (r.up > 0 ? '<span><b>' + r.up + '期' + (r.upm ? '以上' : '') + '</b>連続増配</span>' : '') +
-        (r.g1 != null || r.g5 != null ? '<span>増配率 1年 <b>' + pct(r.g1) + '</b> ・ ' + (r.g5y ? r.g5y : 5) + '年 <b>' + pct(r.g5, true) +
-          '</b> ・ 10年 <b>' + pct(r.g10, true) + '</b>' + (r.g15 != null ? ' ・ 15年 <b>' + pct(r.g15, true) + '</b>' : '') + '</span>' : '') +
-        '<span>' + esc(r.fy.replace("-", "年")) + '月期の有報</span>' +
-      '</div>' +
+      miniFacts(r) +
       (r.q && r.q.length ? '<details class="quote"><summary>有報の配当政策(根拠の文)</summary>' +
         r.q.map(function (t) { return '<q>' + esc(t.replace(/^[0-9０-９]*【配当政策】/, "")) + '</q>'; }).join("") + '</details>' : '') +
       '<div class="price-row" data-code="' + esc(r.c) + '">' +
@@ -2158,6 +2183,13 @@
     try { sessionStorage.removeItem(WAIT_KEY); } catch (x) {}
     toast(code + ": " + [b.price > 0 ? "株価 " + b.price.toLocaleString("ja-JP") + "円" : "", b.fdiv > 0 ? "予想配当 " + b.fdiv + "円" : ""].filter(Boolean).join("・") + " を入れました");
   }
+  $("list").addEventListener("click", function (e) {
+    var b = e.target.closest(".mini-chart");
+    if (!b) return;
+    var p = b.closest("li").querySelector(".mini-more");
+    p.hidden = !p.hidden;
+    p.textContent = b.dataset.more;
+  });
   $("list").addEventListener("paste", function (e) {
     var row = e.target.closest(".price-row"), t = e.clipboardData && e.clipboardData.getData("text");
     var b = row && quoteOf(t);
