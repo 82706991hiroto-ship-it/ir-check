@@ -1664,9 +1664,9 @@
   function parseQuoteBlock(t) {
     var s = String(t || "").normalize("NFKC").replace(/\s+/g, " ");
     function after(re) { var m = s.match(re); return m ? parseFloat(m[1].replace(/,/g, "")) : NaN; }
-    var fdiv = after(/1株配当\(会社予想\)[^0-9-]*?([0-9][0-9,]*(?:\.[0-9]+)?)/);
-    var yld = after(/配当利回り\(会社予想\)[^0-9-]*?([0-9][0-9,]*(?:\.[0-9]+)?)\s*%/);
-    var feps = after(/EPS\(会社予想\)[^0-9-]*?(-?[0-9][0-9,]*(?:\.[0-9]+)?)/);
+    var fdiv = after(/1株配当\s*\(会社予想\)[^0-9-]{0,40}?([0-9][0-9,]*(?:\.[0-9]+)?)/);
+    var yld = after(/配当利回り\s*\(会社予想\)[^0-9-]{0,40}?([0-9][0-9,]*(?:\.[0-9]+)?)\s*%/);
+    var feps = after(/EPS\s*\(会社予想\)[^0-9-]{0,40}?(-?[0-9][0-9,]*(?:\.[0-9]+)?)/);
     var minBuy = after(/最低購入代金[^0-9]*?([0-9][0-9,]*)/), unit = after(/単元株数[^0-9]*?([0-9][0-9,]*)/);
     var exact = minBuy > 0 && unit > 0;
     var price = exact ? minBuy / unit : fdiv > 0 && yld > 0 ? fdiv / (yld / 100) : NaN;
