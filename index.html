@@ -1703,10 +1703,17 @@
       }
       save(); renderSubject(); renderItems(); renderTally();
       var n = Object.keys(values).length;
+      var chk = dataChecks()[code];
       setAutoStatus((rec.fy ? rec.fy.slice(0, 7).replace("-", "年") + "月期の" : "") + "有価証券報告書から " + n + "項目を採点しました。"
-        + (values.pbr ? "" : " PBRは株価を入れると出ます。"), true);
+        + (values.pbr ? "" : " PBRは株価を入れると出ます。")
+        + (chk ? " ⓘ 数字を要確認: " + chk.join(" / ") + "。有報で確かめてから判断してください。" : ""), true);
     });
   }
+
+  // 毎週の点検(tools/check_data.py)でデータの食い違いが見つかった銘柄
+  var CHECKS = {};
+  fetch("checks.json").then(function (r) { return r.ok ? r.json() : null; }).then(function (j) { if (j && j.flags) CHECKS = j.flags; }, function () {});
+  function dataChecks() { return CHECKS; }
 
   // 株価は各自が証券会社やYahoo!ファイナンスで見て入れる。入れた値はこの端末にだけ、銘柄ごとに残す
   // (累進配当・DOEの一覧ページと共有)
