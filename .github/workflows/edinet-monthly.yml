@@ -42,11 +42,15 @@ jobs:
           path: haito
       - name: 長期の1株配当を付ける
         run: python3 tools/edinet_fin.py longdiv --haito haito/index.html
+      # 人が公式の書類で確かめた正解値(tests/golden.json)と食い違えば、ここで止めて公開しない。
+      # データどうしの食い違いは checks.json に書き、アプリに「数字を要確認」と出す
+      - name: 数字の点検
+        run: python3 tools/check_data.py --haito haito/index.html
       - name: 変わっていればコミットして公開
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          git add fin policy.json
+          git add fin policy.json checks.json
           if git diff --cached --quiet; then echo "変更なし"; exit 0; fi
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"

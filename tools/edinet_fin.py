@@ -452,10 +452,16 @@ def attach_long(fin, haito_html):
     """
     html = open(haito_html, encoding="utf-8").read()
     info = json.loads(re.search(r"var CODE_INFO_MAP = (\{.*?\});\n", html).group(1))
+    spath = os.path.join(os.path.dirname(os.path.abspath(haito_html)), "tools", "edinet", "state.json")
+    hstate = json.load(open(spath)) if os.path.exists(spath) else {}
     n = 0
     for m in fin.values():
         for code, r in m.items():
             r.pop("dl", None)
+            # 前の回で差し替えた値は元に戻してから考え直す
+            if r.get("div_raw"):
+                r["div"] = r.pop("div_raw")
+            r.pop("divchk", None)
             d, v = r.get("div"), info.get(code)
             if not d or not v or len(v) < 4 or not v[3]:
                 continue
@@ -464,6 +470,15 @@ def attach_long(fin, haito_html):
                 pass
             elif len(d) >= 2 and close(long[-1], d[-2]):
                 long = long + [d[-1]]
+            elif hstate.get(code, "")[:7] == (r.get("fy") or "")[:7] and len(long) >= len(d):
+                # 同じ期なのに合わない: 期の途中の株式分割で、有報の1株配当は分割前の中間配当と分割後の期末配当の合計のまま。
+                # HAITO は株数の変化から割り戻しているので、そちらの値を使う(生の値は div_raw に残す)
+                adj = [round(x, 2) for x in long[-len(d):]]
+                r["div_raw"], r["div"] = d, adj
+                # 古い期は「生の値 ÷ 整数」になっているはず。そうでなければ割り戻しを人が確かめる
+                ks = [d[i] / adj[i] for i in range(len(d) - 1) if adj[i] > 0 and d[i] > 0]
+                if not ks or any(abs(k / round(k) - 1) > 0.03 or round(k) < 1 for k in ks):
+                    r["divchk"] = 1
             else:
                 continue
             if len(long) > len(d):
