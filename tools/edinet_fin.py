@@ -395,6 +395,36 @@ def apply_splits(fin, haito_html):
     return n
 
 
+def attach_special(fin, haito_html):
+    """HAITOの data/special-dividends.json(有報の注記から拾った記念配当・特別配当)で、
+    記念・特別配当を除いた1株配当 dlo(dl と同じ古い順)と、どの期に含まれていたか sp を付ける。"""
+    path = os.path.join(os.path.dirname(os.path.abspath(haito_html)), "data", "special-dividends.json")
+    if not os.path.exists(path):
+        return 0
+    data = json.load(open(path, encoding="utf-8"))
+    n = 0
+    for m in fin.values():
+        for code, r in m.items():
+            r.pop("dlo", None)
+            r.pop("sp", None)
+            e, fy = data.get(code), r.get("fy") or ""
+            series = r.get("dl") if r.get("dl") and len(r["dl"]) >= len(r.get("div") or []) else r.get("div")
+            if not e or not fy or not series:
+                continue
+            ords, sp = list(series), {}
+            for k, x in (e.get("期") or {}).items():
+                back = int(fy[:4]) * 12 + int(fy[5:7]) - int(k[:4]) * 12 - int(k[5:7])
+                if back % 12 or not (0 <= back // 12 < len(series)) or not (0 < x.get("割合", 0) < 1):
+                    continue
+                i = len(series) - 1 - back // 12
+                ords[i] = round(series[i] * (1 - x["割合"]), 2)
+                sp[k] = round(series[i] - ords[i], 2)
+            if sp:
+                r["dlo"], r["sp"] = ords, sp
+                n += 1
+    return n
+
+
 def attach_long(fin, haito_html):
     """HAITO(haito-dashboard)の内蔵データにある最大14期の1株配当を、fin の dl(古い順)に付ける。
 
@@ -440,11 +470,13 @@ def write_policy(fin):
             if not r.get("pol"):
                 continue
             d, e = r.get("div") or [], r.get("eps") or []
-            ds = r.get("dl") or d
+            ds = r.get("dlo") or r.get("dl") or d  # 記念・特別配当を除いた普通配当で数える
             up = streak_of(ds)
             rows.append({
                 "c": code, "n": r.get("n", ""), "s": r.get("sec", ""), "p": r["pol"], "fy": (r.get("fy") or "")[:7],
-                "d": d, "po": round(d[-1] / e[-1] * 100, 1) if d and e and e[-1] > 0 else None,
+                # 一覧の小さな棒も普通配当で(記念配当の翌年が赤くならないように)
+                "d": (r["dlo"][-len(d):] if r.get("dlo") and d else d),
+                "po": round(d[-1] / e[-1] * 100, 1) if d and e and e[-1] > 0 else None,
                 "up": up, "q": r.get("polq", []),
             })
             # 記録の始まりまで増配が続いている会社は、それより前も増配だったかもしれない(「N期以上」と出す)
@@ -452,7 +484,7 @@ def write_policy(fin):
                 rows[-1]["upm"] = 1
             # 1年・5年・10年の増配率(年平均)。長期の記録があればそれを使う。
             # 5年分(6期)ない会社は、5期(4年)の年平均で代わりにし、年数を g5y に残す
-            series = r.get("dl") if r.get("dl") and len(r["dl"]) > len(d) else d
+            series = r.get("dlo") or (r.get("dl") if r.get("dl") and len(r["dl"]) > len(d) else d)
             def cagr(n):
                 if len(series) > n and series[-1 - n] > 0 and series[-1] > 0:
                     return round((series[-1] / series[-1 - n]) ** (1 / n) - 1, 4)
@@ -531,6 +563,7 @@ def main():
         fin = load_fin()
         print("決算後の分割で割り戻した会社", apply_splits(fin, a.haito))
         print("長期の1株配当を付けた会社", attach_long(fin, a.haito))
+        print("記念・特別配当を除いた系列を付けた会社", attach_special(fin, a.haito))
         save_fin(fin)
         print("累進配当・DOEの会社", write_policy(fin))
     else:

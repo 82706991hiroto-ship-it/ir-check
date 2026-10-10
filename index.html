@@ -941,8 +941,10 @@
     // 営業CFを判定しない業種(金融・不動産)では、営業CFの赤字で❌にしない
     var noCf = fin || CF_SKIP_SECTORS.indexOf(rec.sec) !== -1;
     ev.cash = rec.cash ? Object.assign(cashOf(rec.cash, rec.ocf, noCf) || {}, { series: rec.cash }) : null;
-    var dLong = rec.dl && rec.dl.length > (rec.div || []).length ? rec.dl : rec.div;
+    // 記念・特別配当(有報の注記)を除いた普通配当で、増配・減配を判定する
+    var dLong = rec.dlo || (rec.dl && rec.dl.length > (rec.div || []).length ? rec.dl : rec.div);
     ev.dividend = dLong ? Object.assign(dividendOf(dLong) || {}, { series: dLong }) : null;
+    if (ev.dividend && rec.sp) ev.dividend.reason += "(記念・特別配当を除いて判定: " + specialText(rec.sp) + ")";
     // 有報の配当性向は個別(親会社単体)の表にしか載らないことが多い。一般に使う連結の
     // 配当性向に合わせるため、1株配当 ÷ 連結EPS で出す。EPSが無ければ有報の値を使う
     var dLast = lastOf(rec.div), eLast = lastOf(rec.eps);
@@ -1379,18 +1381,21 @@
     });
     return wrap;
   }
+  function specialText(sp) {
+    return Object.keys(sp).sort().map(function (k) { return k.slice(0, 4) + "年" + parseInt(k.slice(5, 7), 10) + "月期 " + sp[k] + "円"; }).join("、");
+  }
   function renderTrends() {
     var panel = document.getElementById("trendPanel"), box = document.getElementById("trends");
     var a = state.auto, code = (state.subject.code || "").trim().toUpperCase();
     var rec = a && a.rec && a.code === code ? a.rec : null;
-    var dps = rec && (rec.dl && rec.dl.length >= (rec.div || []).length ? rec.dl : rec.div);
+    var dps = rec && (rec.dlo || (rec.dl && rec.dl.length >= (rec.div || []).length ? rec.dl : rec.div));
     if (!rec || !rec.fy || !dps || dps.length < 2) { panel.hidden = true; return; }
     panel.hidden = false;
     box.innerHTML = "";
     // 別の銘柄を開いたときだけ動かす(入力のたびには動かさない)
     box.classList.toggle("anim", renderTrends.last !== code);
     renderTrends.last = code;
-    box.appendChild(barChart("1株配当", "期ごとの年間配当(円)。赤は前の期より減った期", fyLabels(rec.fy, dps.length), dps, { unit: "円", downMark: true }));
+    box.appendChild(barChart("1株配当", "期ごとの年間配当(円)。赤は前の期より減った期" + (rec.sp ? "。記念・特別配当は除いています(" + specialText(rec.sp) + ")" : ""), fyLabels(rec.fy, dps.length), dps, { unit: "円", downMark: true }));
     var eps = rec.eps, div = rec.div;
     // 1株配当と1株利益で期の数が違う会社(分割の年を外した等)は、新しい期の方からそろえる
     var k = eps && div ? Math.min(eps.length, div.length) : 0;
