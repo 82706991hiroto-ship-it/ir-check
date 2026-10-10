@@ -379,11 +379,16 @@ def apply_splits(fin, haito_html):
             done = r.setdefault("splits", [])
             if key in done or (r.get("fy") or "") >= key or key > dt.date.today().isoformat():
                 continue
-            # 「EPS調整済」: 有報の提出前に効力が出た分割で、EPS・BPSは有報の側で分割後の株数になっている
-            for f in ("div",) if e.get("EPS調整済") else ("div", "eps"):
+            # 「EPS調整済」: 有報の提出前に効力が出た分割で、EPS・BPSは有報の側で分割後の株数になっている。
+            # 書いていなければ、当期の 1株配当÷EPS を配当性向と比べて決める(比率ぶんずれていれば調整済み)
+            adj = e.get("EPS調整済")
+            if adj is None:
+                d, p, po = (r.get("div") or [None])[-1], (r.get("eps") or [None])[-1], r.get("payout")
+                adj = bool(d and p and p > 0 and po and po > 0 and abs(d / p / po / ratio - 1) < 0.15)
+            for f in ("div",) if adj else ("div", "eps"):
                 if r.get(f):
                     r[f] = [round(x / ratio, 2) for x in r[f]]
-            if r.get("bps") and not e.get("EPS調整済"):
+            if r.get("bps") and not adj:
                 r["bps"] = round(r["bps"] / ratio, 2)
             done.append(key)
             n += 1
