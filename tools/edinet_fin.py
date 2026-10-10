@@ -70,6 +70,23 @@ def policy(text):
     return tags, quotes[:2]
 
 
+# 「配当性向○%を目安(目標・程度・以上)」のように、利益に連動して配当を決める方針。
+# 利益が落ちると配当も下がりやすいので、高い配当性向の会社の説明に使う
+PAYOUT_TARGET = re.compile(r"配当性向[^。]{0,25}?(\d{2,3}(?:\.\d)?)\s*[%％](?:程度|前後|を目安|を目途|を目処|目途|目処|以上|を目標|目標|を基準|水準|を基本|を下限)")
+
+
+def payout_target(text):
+    """(配当性向の目安 %, 根拠の文) か None"""
+    text = re.sub(r"\s+", "", text or "")
+    for sent in re.split(r"(?<=。)", text):
+        m = PAYOUT_TARGET.search(sent)
+        if m and 10 <= float(m.group(1)) <= 150:
+            a = max(0, m.start() - 40)
+            q = sent if len(sent) <= 140 else ("…" if a > 0 else "") + sent[a:a + 130] + "…"
+            return float(m.group(1)), q
+    return None
+
+
 # 損益計算書側の営業利益(主要な経営指標に営業利益が無い会社が多いため)
 PL_OPINC = ["jpigp_cor:OperatingProfitLossIFRS", "jppfs_cor:OperatingIncome"]
 
@@ -139,6 +156,7 @@ def parse_csv(text):
     out["surplus"] = [(x["dps"], x.get("amt")) for _, x in sorted(rows.items()) if x.get("dps")]
     ptext = facts.get(("jpcrp_cor:DividendPolicyTextBlock", "FilingDateInstant"))
     out["policy"] = policy(ptext) if ptext else None
+    out["potarget"] = payout_target(ptext) if ptext else None
     for field, names in SUMMARY.items():
         kind = "Instant" if field in ("eq", "cash", "bps", "shares") else "Duration"
         best = None
@@ -281,6 +299,8 @@ def record(parsed, name, sector):
         tags, quotes = parsed["policy"]
         if tags:
             rec["pol"], rec["polq"] = tags, quotes
+    if parsed.get("potarget"):
+        rec["pot"], rec["potq"] = parsed["potarget"]
     return rec
 
 
@@ -542,10 +562,32 @@ def cmd_update(days, only_missing=False):
     return changed
 
 
+def cmd_payout(days):
+    """最新の有報の配当政策から「配当性向○%」型の方針だけを読み直して足す(一度きりの埋め合わせ用)"""
+    fin = load_fin()
+    filings = recent_filings(days)
+    todo = [(c, x) for c, x in filings.items() if fin.get(c[0], {}).get(c) and fin[c[0]][c].get("fy", "") <= x["periodEnd"]]
+    print("有報", len(todo), "件を読みます", flush=True)
+    n = 0
+    with ThreadPoolExecutor(4) as ex:
+        for (code, x), parsed in zip(todo, ex.map(lambda t: download(t[1]["docID"]), todo)):
+            if not parsed:
+                continue
+            r = fin[code[0]][code]
+            r.pop("pot", None); r.pop("potq", None)
+            if parsed.get("potarget"):
+                r["pot"], r["potq"] = parsed["potarget"]
+                n += 1
+    save_fin(fin)
+    return n
+
+
 def main():
     ap = argparse.ArgumentParser()
     sub = ap.add_subparsers(dest="cmd", required=True)
     sub.add_parser("policy")
+    po = sub.add_parser("payout")
+    po.add_argument("--days", type=int, default=400)
     lg = sub.add_parser("longdiv")
     lg.add_argument("--haito", required=True, help="haito-dashboard の index.html")
     u = sub.add_parser("update")
@@ -557,6 +599,8 @@ def main():
     a = ap.parse_args()
     if a.cmd == "update":
         cmd_update(a.days, a.only_missing)
+    elif a.cmd == "payout":
+        print("配当性向○%型の方針の会社", cmd_payout(a.days))
     elif a.cmd == "policy":
         print(write_policy(load_fin()))
     elif a.cmd == "longdiv":
