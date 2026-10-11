@@ -292,7 +292,17 @@
   .tag.p-doe { background: var(--ok-soft); color: var(--ok); }
   .tag.p-cand { background: var(--mid-soft); color: var(--mid); }
   .tag.p-cand .st-off { opacity: .3; }
-  .cand-odds { flex-basis: 100%; font-size: 11.5px; color: var(--text-2); }
+  .cand-box { flex-basis: 100%; display: grid; gap: 6px; padding: 8px 10px; border-radius: 10px; background: var(--field); font-size: 12.5px; color: var(--text-2); }
+  .cand-odds { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+  .cand-odds b { color: var(--text); }
+  .cand-odds small { margin-left: 2px; }
+  .dots { display: inline-flex; gap: 3px; }
+  .dots i { width: 9px; height: 9px; border-radius: 50%; background: var(--line); }
+  .dots i.on { background: var(--mid); }
+  .cand-why { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 6px; }
+  .cand-why small { font-weight: 700; color: var(--text-2); margin-right: 2px; }
+  .cand-why span { color: var(--text); font-weight: 600; }
+  .cand-why span + span::before { content: "・"; color: var(--text-2); font-weight: 400; margin-right: 6px; }
   details.quote q .why { display: block; margin-top: 2px; font-size: 11.5px; color: var(--text-2); }
   .tag.p-why { background: transparent; border: 1px solid var(--line); font-weight: 600; }
   details.quote q b { display: block; font-size: 11.5px; color: var(--text); }
@@ -2151,12 +2161,17 @@
     var li = document.createElement("li");
     li.className = "co";
     var tags = r.p.map(function (t) { return '<span class="tag ' + (t === "DOE" ? "p-doe" : "p-rui") + '">' + esc(t) + '</span>'; }).join("");
-    if (r.k) tags = '<span class="tag p-cand">予備軍' + (r.st === 2 ? "" : "(テーマ1つ)") + '</span>' +
-      r.k.map(function (k) { return '<span class="tag p-why">' + esc(k[0]) + '</span>'; }).join("") +
-      // 過去の実績を一言で(開かなくても分かるように)
-      '<span class="cand-odds">' + (r.st === 2
-        ? "過去、同じ条件の会社は10社中約4社が3年以内に宣言(6〜9年では5〜6社)"
-        : "過去、同じ条件の会社は10社中約3社が3年以内に宣言") + '。条件がない会社は約2社</span>';
+    if (r.k) {
+      // 「似た会社10社のうち何社が宣言したか」を点の数で見せる(ふつうの会社は2社)
+      var hit = r.st === 2 ? 4 : 3, dots = "";
+      for (var i = 0; i < 10; i++) dots += '<i class="' + (i < hit ? "on" : "") + '"></i>';
+      tags = '<span class="tag p-cand">累進・DOE予備軍</span>' +
+        '<div class="cand-box">' +
+          '<div class="cand-odds"><span class="dots" aria-hidden="true">' + dots + '</span>' +
+            '<span>似た会社は<b>10社中' + hit + '社</b>が3年以内に宣言<small>(ふつうは2社)</small></span></div>' +
+          '<div class="cand-why"><small>理由</small>' + r.k.map(function (k) { return '<span>' + esc(k[0]) + '</span>'; }).join("") + '</div>' +
+        '</div>';
+    }
     if (r.po != null && r.po < 30) tags += '<span class="tag room">配当性向30%未満・増配余力</span>';
     li.innerHTML =
       '<div class="co-head"><span class="co-name"><span class="co-code">' + esc(r.c) + '</span>' + esc(r.n.normalize("NFKC")) + '</span>' +
