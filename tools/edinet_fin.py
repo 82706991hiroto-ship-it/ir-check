@@ -587,19 +587,16 @@ def streak_of(s):
     return up
 
 
-# 予備軍のパターン。3年前・6年前・9年前の有報で「その後に累進配当・DOEを宣言したか」を確かめ、
-# どの時期でも全体の約2倍以上宣言していた条件だけを使う。率は「3年前の有報 → 3年以内に宣言」の実績(全体は17%)
-CAND_PATTERNS = {
-    "A": ("配当性向の目安×減配なし", 38, "配当を「配当性向○%」と数字で約束し、実際に下げずに続けてきた会社。次の一歩として「下げない」約束(累進配当)に進みやすい"),
-    "B": ("配当性向の目安×配当性向高め", 37, "利益に連動させたまま配当性向が高くなると、減益のときに減配しやすい。利益に左右されにくい累進配当・DOEに切り替える会社が多い"),
-    "C": ("中期経営計画で還元方針", 37, "配当の方針を中期経営計画の中で決めている会社。計画を作り直すときに新しい方針(累進配当・DOE)を出しやすい"),
-    "D": ("自己株買いも方針に×減配なし", 34, "配当と自己株買いを合わせて株主還元を設計し、減配もしていない会社。配当の約束も文章にしやすい"),
-    "E": ("大型株×配当性向の目安", 37, "大きな会社ほど機関投資家から還元方針をはっきりさせるよう求められやすい"),
-    "F": ("増配を目指すと明記", 39, "すでに「増配」を方針にしている。累進配当の宣言とほぼ同じ方向"),
-    "G": ("導入を検討中", None, "累進配当・DOEの導入を検討していると有報に書いている"),
+# 予備軍のテーマ。3年前・6年前・9年前の有報で「その後に累進配当・DOEを宣言したか」を確かめ、
+# テーマが2つ以上ある会社は、どの時期でも10社中約4社(6〜9年なら5〜6社)が宣言していた(何もない会社は約2社)。
+# テーマ1つは10社中約3社なので「もっと見る」の扱い
+CAND_THEMES = {
+    "目安": ("配当性向の目安", "配当をすでに「配当性向○%」と数字で約束している会社。減配せずに続けている・配当性向が高くなってきた・大きな会社のどれかに当てはまると、利益に左右されにくい累進配当・DOEに進みやすい"),
+    "中計": ("中期経営計画で還元方針", "配当の方針を中期経営計画の中で決めている会社。計画を作り直すときに新しい方針(累進配当・DOE)を出しやすい"),
+    "自己株": ("自己株買いも方針に", "配当と自己株買いを合わせて株主還元を設計し、減配もしていない会社。配当の約束も文章にしやすい"),
+    "増配": ("増配を目指すと明記", "すでに「増配」を方針にしている。累進配当の宣言とほぼ同じ方向"),
+    "検討": ("導入を検討中", "累進配当・DOEの導入を検討していると有報に書いている"),
 }
-# パターンに当てはまらないが、宣言に近いサインがある会社(★1。過去の実績は全体の1.2〜1.7倍)
-CAND_SIMPLE = {"実績は累進": "長く減配せず増配を続けている", "下限を設定": "1株配当に下限を決めている", "還元強化へ方針変更": "株主還元を強める向きに方針を変えた"}
 
 
 def nocut_years(ds):
@@ -613,52 +610,35 @@ def nocut_years(ds):
 
 
 def candidate(r, ds, po):
-    """予備軍なら (★, 理由の一覧) を返す。理由は [見出し, 当てはまった中身, なぜ, 過去の宣言率%]"""
+    """予備軍なら (段階, 理由の一覧) を返す。段階 2: テーマ2つ以上か導入を検討中、1: テーマ1つ。
+    理由は [テーマ, 当てはまった中身, なぜ]"""
     polc = dict(r.get("polc") or [])
     kw = r.get("kw") or []
     nc = nocut_years(ds)
-    meyasu, nocut = r.get("pot") is not None, nc >= 4
+    meyasu = r.get("pot") is not None
     hipo = po is not None and 40 <= po <= 100
     big = (r.get("net") or 0) >= 400
     k = []
     def add(key, detail):
-        t, rate, why = CAND_PATTERNS[key]
-        k.append([t, detail, why, rate])
-    if meyasu and nocut:
-        add("A", "配当性向%s%%を目安・%d年減配なし" % (fmt(r["pot"]), nc))
-    if meyasu and hipo:
-        add("B", "配当性向%s%%を目安・いまの配当性向%d%%" % (fmt(r["pot"]), round(po)))
-    if "中計" in kw and (big or nocut or meyasu):
-        add("C", "配当政策に中期経営計画の記載" + ("・純資産%s億円" % format(r["net"], ",") if big else "・%d年減配なし" % nc if nocut else "・配当性向の目安あり"))
-    if "自己株" in kw and nocut:
-        add("D", "配当政策に自己株式の記載・%d年減配なし" % nc)
-    if big and meyasu:
-        add("E", "純資産%s億円・配当性向%s%%を目安" % (format(r["net"], ","), fmt(r["pot"])))
+        t, why = CAND_THEMES[key]
+        k.append([t, detail, why])
+    if meyasu and (nc >= 4 or hipo or big):
+        bits = ["配当性向%s%%を目安" % fmt(r["pot"])]
+        if nc >= 4: bits.append("%d年減配なし" % nc)
+        if hipo: bits.append("いまの配当性向%d%%" % round(po))
+        if big: bits.append("純資産%s億円" % format(r["net"], ","))
+        add("目安", "・".join(bits))
+    if "中計" in kw and (big or nc >= 4 or meyasu):
+        add("中計", "配当政策に中期経営計画の記載" + ("・純資産%s億円" % format(r["net"], ",") if big else "・%d年減配なし" % nc if nc >= 4 else ""))
+    if "自己株" in kw and nc >= 4:
+        add("自己株", "配当政策に自己株式の記載・%d年減配なし" % nc)
     if "増配を目指す" in polc:
-        add("F", polc["増配を目指す"])
+        add("増配", polc["増配を目指す"])
     if "導入を検討" in polc:
-        add("G", polc["導入を検討"])
-    st = 3 if (len(k) >= 2 or "導入を検討" in polc) else 2 if k else 0
+        add("検討", polc["導入を検討"])
     if not k:
-        tr = track_record(ds, po)
-        if tr and nc >= 9:
-            k.append(["実績は累進", tr[0], CAND_SIMPLE["実績は累進"], None])
-        for t in ("下限を設定", "還元強化へ方針変更"):
-            if t in polc and po is not None and po <= 70 and nc >= 1:
-                k.append([t, polc[t], CAND_SIMPLE[t], None])
-        st = 1 if k else 0
-    if not st:
         return None
-    # 小さくて利益が薄い会社は、過去ほとんど宣言していない(全体の0.2〜0.4倍)ので★を1つ下げる
-    roe = (r.get("roe") or [None])[-1]
-    small = r.get("net") is not None and r["net"] < 100
-    poor = (roe is not None and roe < 0.03) or sum(1 for v in (r.get("ocf") or []) if v < 0) >= 2
-    if small and poor:
-        st -= 1
-        if not st:
-            return None
-        k.append(["小型で利益が薄い", "純資産%s億円" % r["net"], "小さくて利益の薄い会社は、過去ほとんど宣言していないので★を1つ下げています", None])
-    return st, k
+    return (2 if len(k) >= 2 or "導入を検討" in polc else 1), k, nc
 
 
 def fmt(v):
@@ -698,9 +678,9 @@ def write_policy(fin):
                 got = candidate(r, ds, po)
                 if not got:
                     continue
-                st, k = got
-                # 並べ替えの点数: ★、次に当てはまったパターンの数
-                row = {"p": [], "k": k, "st": st, "sc": st * 10 + sum(1 for x in k if x[3])}
+                st, k, nc = got
+                # 並べ替え: テーマの数が多い順、次に減配なしの年数が長い順
+                row = {"p": [], "k": k, "st": st, "sc": len(k) * 100 + nc}
             up = streak_of(ds)
             row.update({
                 "c": code, "n": r.get("n", ""), "s": r.get("sec", ""), "fy": (r.get("fy") or "")[:7],

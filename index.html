@@ -489,19 +489,16 @@
     <p><span class="note-label">拾い方</span>有報の配当政策の文章に「累進配当」「減配しない」「維持または増配」「前期実績を下限」などがあれば<b>累進配当</b>、
       「DOE」「株主資本配当率」「純資産配当率」などがあれば<b>DOE</b>としています。「DOEも踏まえて判断」のような軽い書き方も含むので、根拠の文で確かめてください。</p>
     <p><span class="note-label">予備軍</span>まだ宣言していない会社のうち、<b>過去に宣言した会社と同じ特徴を持つ会社</b>です。
-      3年前・6年前・9年前の有報を全社分読み、その後に累進配当・DOEを宣言した会社に共通していた条件を探しました。
-      どの時期でも宣言しやすかった条件(パターン)だけを使い、当てはまる数で★を付けています。</p>
-    <p><span class="note-label">★の意味</span>3年前の有報の時点で同じ★だった会社が、その後3年以内に宣言した割合です(全体は17%)。
-      <b>★★★</b>(パターン2つ以上): 約37% ・ <b>★★</b>(パターン1つ): 約33% ・ <b>★</b>(長く減配なしなどの簡単なサインだけ): 約22%。
-      小さくて利益の薄い会社(純資産100億円未満で、ROE3%未満か営業CFの赤字が多い)は、過去ほとんど宣言していないので★を1つ下げています。</p>
-    <p><span class="note-label">パターン</span>
-      <b>配当性向の目安×減配なし</b>: 配当を「配当性向○%」と数字で約束し、4年以上下げずに続けてきた。次は「下げない」約束に進みやすい。
-      <b>配当性向の目安×配当性向高め</b>: 利益連動のまま配当性向が40%以上に。減益で減配しやすくなるので、利益に左右されにくい方針に切り替える会社が多い。
-      <b>中期経営計画で還元方針</b>: 配当の方針を中期経営計画で決めている。計画を作り直すときに新しい方針を出しやすい。
-      <b>自己株買いも方針に×減配なし</b>: 配当と自己株買いを合わせて還元を設計し、減配もしていない。
-      <b>大型株×配当性向の目安</b>: 純資産400億円以上。大きい会社ほど投資家から還元方針をはっきりさせるよう求められやすい。
-      <b>増配を目指すと明記</b>・<b>導入を検討中</b>: 有報の配当政策にそう書いている。
-      どれも宣言の予定を示すものではありません。決算説明資料や中期経営計画で確かめてください。</p>
+      3年前・6年前・9年前の有報を全社分読み、その後に累進配当・DOEを宣言した会社に共通していた特徴を4つの「テーマ」にまとめました。
+      テーマが2つ以上ある会社を予備軍として出します(テーマ1つの会社は「テーマ1つの会社も見る」で表示)。</p>
+    <p><span class="note-label">当たり方</span>3年前の有報の時点で、テーマが2つ以上あった会社は<b>10社中約4社</b>が3年以内に宣言しました(6〜9年の長さで見ると5〜6社)。
+      テーマ1つは10社中約3社、テーマのない会社は約2社です。半分以上は宣言しないので、予備軍であることだけを買う理由にはせず、今の配当・財務で判断してください。</p>
+    <p><span class="note-label">テーマ</span>
+      <b>配当性向の目安</b>: 「配当性向○%」を目安にしていて、4年以上減配なし・いまの配当性向40%以上・純資産400億円以上のどれか。配当をすでに数字で約束している会社は、利益に左右されにくい方針に進みやすい。
+      <b>中期経営計画で還元方針</b>: 配当政策に中期経営計画の記載があり、大きな会社か4年以上減配なしか配当性向の目安あり。計画を作り直すときに新しい方針を出しやすい。
+      <b>自己株買いも方針に</b>: 配当政策に自己株式の記載があり、4年以上減配なし。
+      <b>増配を目指すと明記</b>: 「継続的な増配を基本」などの書き方がある。
+      <b>導入を検討中</b>: 累進配当・DOEの導入を検討していると書いている(これだけで予備軍)。</p>
     <p><span class="note-label">反映の時期</span>有報は年1回、決算から約3か月後に出ます。決算短信や中期経営計画で新しく宣言した会社は、次の有報が出るまでここに載りません。
       数字は毎週、新しく提出された有報で更新しています(<span id="built"></span>)。</p>
     <p><span class="note-label">株価</span>「株価・予想を見る」で開いたYahoo!ファイナンスの参考指標の欄(色の付いた所)をまとめてコピーして戻ると、株価と予想配当が入ります。株価だけのコピーでもかまいません。入れた値はこの端末に保存し、チェックシートでも使います。</p>
@@ -2082,7 +2079,7 @@
     return "利回り " + (pr.f > 0 ? "予想 <b>" + y.toFixed(2) + "%</b>" + (d > 0 ? " ・ 実績 " + (d / pr.p * 100).toFixed(2) + "%" : "") : "実績 <b>" + y.toFixed(2) + "%</b>") +
       ' <small>(' + pr.d.slice(5).replace("-", "/") + ')</small>';
   }
-  var rows = [], shown = PAGE, pol = "";
+  var rows = [], shown = PAGE, pol = "", candAll = false;
   var $ = function (id) { return document.getElementById(id); };
 
   function esc(t) {
@@ -2109,6 +2106,7 @@
     var out = rows.filter(function (r) {
       // 予備軍(宣言なし)は「予備軍」を選んだときだけ出す
       if (pol === "cand" ? r.p.length : !r.p.length) return false;
+      if (pol === "cand" && !candAll && r.st !== 2) return false;
       if (pol === "both" ? r.p.length < 2 : pol && pol !== "cand" && r.p.indexOf(pol) === -1) return false;
       if (sec && r.s !== sec) return false;
       if (po === "low" && !(r.po != null && r.po < 30)) return false;
@@ -2119,7 +2117,7 @@
       return true;
     });
     var key = $("sort").value;
-    // 予備軍の★(点数)が多い順。同じ点数なら連続増配が長い順
+    // 予備軍のテーマが多い順。同じなら減配なしの年数が長い順(sc に入れてある)
     if (key === "star") out.sort(function (a, b) { return (b.sc || 0) - (a.sc || 0) || b.up - a.up || a.c.localeCompare(b.c); });
     if (key === "up") out.sort(function (a, b) { return b.up - a.up || a.c.localeCompare(b.c); });
     if (key === "po") out.sort(function (a, b) { return (a.po == null ? 999 : a.po) - (b.po == null ? 999 : b.po); });
@@ -2154,10 +2152,12 @@
     var li = document.createElement("li");
     li.className = "co";
     var tags = r.p.map(function (t) { return '<span class="tag ' + (t === "DOE" ? "p-doe" : "p-rui") + '">' + esc(t) + '</span>'; }).join("");
-    if (r.k) tags = '<span class="tag p-cand">予備軍 ' + "★★★".slice(0, r.st || 1) + '<span class="st-off">' + "★★★".slice(r.st || 1) + '</span></span>' + r.k.slice(0, 2).map(function (k) { return '<span class="tag p-why">' + esc(k[0]) + '</span>'; }).join("") +
-      (r.k.length > 2 ? '<span class="tag p-why">ほか' + (r.k.length - 2) + 'つ</span>' : '') +
-      // ★の意味を一言で(開かなくても分かるように)
-      '<span class="cand-odds">過去、この★の会社は3年以内に約' + ({ 3: 37, 2: 33, 1: 22 }[r.st] || 22) + '%が宣言(全体17%)</span>';
+    if (r.k) tags = '<span class="tag p-cand">予備軍' + (r.st === 2 ? "" : "(テーマ1つ)") + '</span>' +
+      r.k.map(function (k) { return '<span class="tag p-why">' + esc(k[0]) + '</span>'; }).join("") +
+      // 過去の実績を一言で(開かなくても分かるように)
+      '<span class="cand-odds">' + (r.st === 2
+        ? "過去、同じ条件の会社は10社中約4社が3年以内に宣言(6〜9年では5〜6社)"
+        : "過去、同じ条件の会社は10社中約3社が3年以内に宣言") + '。条件がない会社は約2社</span>';
     if (r.po != null && r.po < 30) tags += '<span class="tag room">配当性向30%未満・増配余力</span>';
     li.innerHTML =
       '<div class="co-head"><span class="co-name"><span class="co-code">' + esc(r.c) + '</span>' + esc(r.n.normalize("NFKC")) + '</span>' +
@@ -2169,8 +2169,7 @@
       (r.k ? '<details class="quote"><summary>予備軍とみた理由</summary>' +
         r.k.map(function (k) {
           return '<q><b>' + esc(k[0]) + '</b>' + esc(String(k[1] || "").replace(/^[0-9０-９]*【配当政策】/, "")) +
-            (k[2] ? '<span class="why">なぜ: ' + esc(k[2]) + '</span>' : '') +
-            (k[3] ? '<span class="why">過去の実績: この条件の会社は3年以内に約' + k[3] + '%が宣言(全体17%)</span>' : '') + '</q>';
+            (k[2] ? '<span class="why">なぜ: ' + esc(k[2]) + '</span>' : '') + '</q>';
         }).join("") +
         '<q>宣言の予定を示すものではありません。決算説明資料や中期経営計画で確かめてください。</q></details>' : '') +
       '<div class="price-row" data-code="' + esc(r.c) + '">' +
@@ -2186,12 +2185,13 @@
   function render() {
     var list = filtered();
     // 全体の社数は、宣言済みと予備軍を分けて数える
-    var all = rows.filter(function (r) { return pol === "cand" ? !r.p.length : r.p.length; }).length;
+    var all = rows.filter(function (r) { return pol === "cand" ? !r.p.length && (candAll || r.st === 2) : r.p.length; }).length;
     $("count").innerHTML = "<strong>" + list.length.toLocaleString("ja-JP") + "</strong> 社" +
       (pol === "cand" ? "(予備軍)" : "") + (list.length !== all ? "(全" + all + "社中)" : "") +
-      (pol === "cand" ? '<br><small>' + [3, 2, 1].map(function (n) {
-        return "★".repeat(n) + " " + list.filter(function (r) { return (r.st || 1) === n; }).length + "社";
-      }).join(" ・ ") + '</small>' : "");
+      (pol === "cand" ? '<br><small>テーマ2つ以上 ' + rows.filter(function (r) { return r.st === 2; }).length + '社' +
+        ' ・ <button type="button" class="link" id="candMore">' + (candAll ? "テーマ1つの会社を隠す" : "テーマ1つの会社も見る(" + rows.filter(function (r) { return r.st === 1; }).length + "社)") + '</button></small>' : "");
+    var cm = $("candMore");
+    if (cm) cm.onclick = function () { candAll = !candAll; reset(); };
     var ul = $("list");
     ul.innerHTML = "";
     if (!list.length) { ul.innerHTML = '<li class="empty">条件に合う会社はありません。</li>'; }
@@ -2204,7 +2204,7 @@
   // 検索条件はこの端末に残す(HAITOへ行って戻ってきたときやアプリを開き直したときも続きから)
   var FKEY = "irFindFilters", FIELDS = ["q", "sec", "po", "up", "sort"];
   function saveFilters(last) {
-    var f = { pol: pol, shown: shown };
+    var f = { pol: pol, shown: shown, candAll: candAll };
     FIELDS.forEach(function (id) { f[id] = $(id).value; });
     try {
       var prev = JSON.parse(localStorage.getItem(FKEY) || "{}");
@@ -2224,6 +2224,7 @@
       el.value = f[id];
     });
     pol = f.pol || "";
+    candAll = !!f.candAll;
     Array.prototype.forEach.call(document.querySelectorAll("#polSeg button"), function (x) { x.classList.toggle("active", x.dataset.v === pol); });
     syncStarSort(false);
     if (pol === "cand" && f.sort === "star") $("sort").value = "star";
@@ -2247,7 +2248,7 @@
     var sel = $("sort"), opt = sel.querySelector('option[value="star"]');
     if (pol === "cand") {
       if (!opt) {
-        opt = document.createElement("option"); opt.value = "star"; opt.textContent = "★が多い順";
+        opt = document.createElement("option"); opt.value = "star"; opt.textContent = "テーマが多い順";
         sel.insertBefore(opt, sel.firstChild);
       }
       if (entering) sel.value = "star";
