@@ -292,6 +292,8 @@
   .tag.p-doe { background: var(--ok-soft); color: var(--ok); }
   .tag.p-cand { background: var(--mid-soft); color: var(--mid); }
   .tag.p-cand .st-off { opacity: .3; }
+  .cand-odds { flex-basis: 100%; font-size: 11.5px; color: var(--text-2); }
+  details.quote q .why { display: block; margin-top: 2px; font-size: 11.5px; color: var(--text-2); }
   .tag.p-why { background: transparent; border: 1px solid var(--line); font-weight: 600; }
   details.quote q b { display: block; font-size: 11.5px; color: var(--text); }
   .tag.room { background: var(--good-soft); color: var(--good); }
@@ -486,14 +488,20 @@
   <div class="notes" data-view="find">
     <p><span class="note-label">拾い方</span>有報の配当政策の文章に「累進配当」「減配しない」「維持または増配」「前期実績を下限」などがあれば<b>累進配当</b>、
       「DOE」「株主資本配当率」「純資産配当率」などがあれば<b>DOE</b>としています。「DOEも踏まえて判断」のような軽い書き方も含むので、根拠の文で確かめてください。</p>
-    <p><span class="note-label">予備軍</span>宣言はないが、宣言に近づいているサインがある会社です。サインを点数にして★1〜3で示し、★の多い順に並べます(5点以上★3・3〜4点★2・1〜2点★1)。
-      <b>導入を検討</b>(4点): 「累進配当の導入を検討」のように、検討していると書いている。
-      <b>下限を設定</b>(3点): 「年間配当○円を下限」のように1株配当の下限がある(累進配当の一歩手前)。
-      <b>増配を目指す</b>(3点): 「継続的な増配を基本」などの書き方がある。
-      <b>還元強化へ方針変更</b>(2点): 株主還元を強める向きに配当方針を変えた。
-      <b>実績は累進</b>(0〜2点): 直近10期(記録が6〜9期ならその全部)で一度も減配せず半分以上の期で増配し、配当性向70%以下。毎期増配なら2点、7割以上の期で増配なら1点。
-      <b>余力あり</b>(1点): 配当性向50%以下で、自己資本比率50%以上(金融は配当性向だけ)。
-      文の手がかりは、直近で減配しておらず配当性向が70%以下の会社だけ数えます。普通配当(記念・特別配当を除く)で数えます。</p>
+    <p><span class="note-label">予備軍</span>まだ宣言していない会社のうち、<b>過去に宣言した会社と同じ特徴を持つ会社</b>です。
+      3年前・6年前・9年前の有報を全社分読み、その後に累進配当・DOEを宣言した会社に共通していた条件を探しました。
+      どの時期でも宣言しやすかった条件(パターン)だけを使い、当てはまる数で★を付けています。</p>
+    <p><span class="note-label">★の意味</span>3年前の有報の時点で同じ★だった会社が、その後3年以内に宣言した割合です(全体は17%)。
+      <b>★★★</b>(パターン2つ以上): 約37% ・ <b>★★</b>(パターン1つ): 約33% ・ <b>★</b>(長く減配なしなどの簡単なサインだけ): 約22%。
+      小さくて利益の薄い会社(純資産100億円未満で、ROE3%未満か営業CFの赤字が多い)は、過去ほとんど宣言していないので★を1つ下げています。</p>
+    <p><span class="note-label">パターン</span>
+      <b>配当性向の目安×減配なし</b>: 配当を「配当性向○%」と数字で約束し、4年以上下げずに続けてきた。次は「下げない」約束に進みやすい。
+      <b>配当性向の目安×配当性向高め</b>: 利益連動のまま配当性向が40%以上に。減益で減配しやすくなるので、利益に左右されにくい方針に切り替える会社が多い。
+      <b>中期経営計画で還元方針</b>: 配当の方針を中期経営計画で決めている。計画を作り直すときに新しい方針を出しやすい。
+      <b>自己株買いも方針に×減配なし</b>: 配当と自己株買いを合わせて還元を設計し、減配もしていない。
+      <b>大型株×配当性向の目安</b>: 純資産400億円以上。大きい会社ほど投資家から還元方針をはっきりさせるよう求められやすい。
+      <b>増配を目指すと明記</b>・<b>導入を検討中</b>: 有報の配当政策にそう書いている。
+      どれも宣言の予定を示すものではありません。決算説明資料や中期経営計画で確かめてください。</p>
     <p><span class="note-label">反映の時期</span>有報は年1回、決算から約3か月後に出ます。決算短信や中期経営計画で新しく宣言した会社は、次の有報が出るまでここに載りません。
       数字は毎週、新しく提出された有報で更新しています(<span id="built"></span>)。</p>
     <p><span class="note-label">株価</span>「株価・予想を見る」で開いたYahoo!ファイナンスの参考指標の欄(色の付いた所)をまとめてコピーして戻ると、株価と予想配当が入ります。株価だけのコピーでもかまいません。入れた値はこの端末に保存し、チェックシートでも使います。</p>
@@ -2146,7 +2154,10 @@
     var li = document.createElement("li");
     li.className = "co";
     var tags = r.p.map(function (t) { return '<span class="tag ' + (t === "DOE" ? "p-doe" : "p-rui") + '">' + esc(t) + '</span>'; }).join("");
-    if (r.k) tags = '<span class="tag p-cand">予備軍 ' + "★★★".slice(0, r.st || 1) + '<span class="st-off">' + "★★★".slice(r.st || 1) + '</span></span>' + r.k.map(function (k) { return '<span class="tag p-why">' + esc(k[0]) + '</span>'; }).join("");
+    if (r.k) tags = '<span class="tag p-cand">予備軍 ' + "★★★".slice(0, r.st || 1) + '<span class="st-off">' + "★★★".slice(r.st || 1) + '</span></span>' + r.k.slice(0, 2).map(function (k) { return '<span class="tag p-why">' + esc(k[0]) + '</span>'; }).join("") +
+      (r.k.length > 2 ? '<span class="tag p-why">ほか' + (r.k.length - 2) + 'つ</span>' : '') +
+      // ★の意味を一言で(開かなくても分かるように)
+      '<span class="cand-odds">過去、この★の会社は3年以内に約' + ({ 3: 37, 2: 33, 1: 22 }[r.st] || 22) + '%が宣言(全体17%)</span>';
     if (r.po != null && r.po < 30) tags += '<span class="tag room">配当性向30%未満・増配余力</span>';
     li.innerHTML =
       '<div class="co-head"><span class="co-name"><span class="co-code">' + esc(r.c) + '</span>' + esc(r.n.normalize("NFKC")) + '</span>' +
@@ -2156,7 +2167,11 @@
       (r.q && r.q.length ? '<details class="quote"><summary>有報の配当政策(根拠の文)</summary>' +
         r.q.map(function (t) { return '<q>' + esc(t.replace(/^[0-9０-９]*【配当政策】/, "")) + '</q>'; }).join("") + '</details>' : '') +
       (r.k ? '<details class="quote"><summary>予備軍とみた理由</summary>' +
-        r.k.map(function (k) { return '<q><b>' + esc(k[0]) + '</b>' + esc(k[1].replace(/^[0-9０-９]*【配当政策】/, "")) + '</q>'; }).join("") +
+        r.k.map(function (k) {
+          return '<q><b>' + esc(k[0]) + '</b>' + esc(String(k[1] || "").replace(/^[0-9０-９]*【配当政策】/, "")) +
+            (k[2] ? '<span class="why">なぜ: ' + esc(k[2]) + '</span>' : '') +
+            (k[3] ? '<span class="why">過去の実績: この条件の会社は3年以内に約' + k[3] + '%が宣言(全体17%)</span>' : '') + '</q>';
+        }).join("") +
         '<q>宣言の予定を示すものではありません。決算説明資料や中期経営計画で確かめてください。</q></details>' : '') +
       '<div class="price-row" data-code="' + esc(r.c) + '">' +
         '<input type="text" inputmode="decimal" autocomplete="off" placeholder="株価" aria-label="株価" value="' + (prices[r.c] && prices[r.c].p ? prices[r.c].p : "") + '">' +

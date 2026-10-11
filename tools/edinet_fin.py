@@ -83,6 +83,12 @@ CAND_TEXT = {
 }
 
 
+def policy_words(text):
+    """配当政策に「中期経営計画」「自己株式」が出てくるか(予備軍の判定に使う)"""
+    text = re.sub(r"\s+", "", text or "")
+    return [w for w, pat in (("中計", r"中期経営計画"), ("自己株", r"自己株式")) if re.search(pat, text)]
+
+
 def candidate_text(text):
     """予備軍の手がかり [(種類, 根拠の文)]。種類ごとに1つ"""
     text = re.sub(r"\s+", "", text or "")
@@ -184,6 +190,7 @@ def parse_csv(text):
     out["policy"] = policy(ptext) if ptext else None
     out["potarget"] = payout_target(ptext) if ptext else None
     out["candtext"] = candidate_text(ptext) if ptext else []
+    out["kw"] = policy_words(ptext) if ptext else []
     for field, names in SUMMARY.items():
         kind = "Instant" if field in ("eq", "cash", "bps", "shares") else "Duration"
         best, best_rank = None, None
@@ -226,6 +233,12 @@ def parse_csv(text):
         out["bps"] = cons_bps
     elif eps_cons:
         out["bps"] = None
+    # 純資産(会社の大きさ。予備軍の判定に使う)。連結、無ければ単体
+    for suf in ("", "_NonConsolidatedMember"):
+        v = by_local.get(("NetAssets", "CurrentYearInstant" + suf))
+        if v is not None:
+            out["net"] = v
+            break
     if not out.get("opinc") or out["opinc"][-1] is None:
         for el in PL_OPINC:
             for ctx in ("CurrentYearDuration", "CurrentYearDuration_NonConsolidatedMember"):
@@ -374,6 +387,10 @@ def record(parsed, name, sector):
         rec["pot"], rec["potq"] = parsed["potarget"]
     if parsed.get("candtext") and not rec.get("pol"):
         rec["polc"] = parsed["candtext"]
+    if parsed.get("kw"):
+        rec["kw"] = parsed["kw"]
+    if parsed.get("net"):
+        rec["net"] = round(parsed["net"] / 1e8)  # 億円
     return rec
 
 
@@ -570,8 +587,82 @@ def streak_of(s):
     return up
 
 
-# 予備軍の点数。宣言に近いサインほど重い(★3: 5点以上、★2: 3〜4点、★1: 1〜2点)
-CAND_POINTS = {"導入を検討": 4, "下限を設定": 3, "増配を目指す": 3, "還元強化へ方針変更": 2}
+# 予備軍のパターン。3年前・6年前・9年前の有報で「その後に累進配当・DOEを宣言したか」を確かめ、
+# どの時期でも全体の約2倍以上宣言していた条件だけを使う。率は「3年前の有報 → 3年以内に宣言」の実績(全体は17%)
+CAND_PATTERNS = {
+    "A": ("配当性向の目安×減配なし", 38, "配当を「配当性向○%」と数字で約束し、実際に下げずに続けてきた会社。次の一歩として「下げない」約束(累進配当)に進みやすい"),
+    "B": ("配当性向の目安×配当性向高め", 37, "利益に連動させたまま配当性向が高くなると、減益のときに減配しやすい。利益に左右されにくい累進配当・DOEに切り替える会社が多い"),
+    "C": ("中期経営計画で還元方針", 37, "配当の方針を中期経営計画の中で決めている会社。計画を作り直すときに新しい方針(累進配当・DOE)を出しやすい"),
+    "D": ("自己株買いも方針に×減配なし", 34, "配当と自己株買いを合わせて株主還元を設計し、減配もしていない会社。配当の約束も文章にしやすい"),
+    "E": ("大型株×配当性向の目安", 37, "大きな会社ほど機関投資家から還元方針をはっきりさせるよう求められやすい"),
+    "F": ("増配を目指すと明記", 39, "すでに「増配」を方針にしている。累進配当の宣言とほぼ同じ方向"),
+    "G": ("導入を検討中", None, "累進配当・DOEの導入を検討していると有報に書いている"),
+}
+# パターンに当てはまらないが、宣言に近いサインがある会社(★1。過去の実績は全体の1.2〜1.7倍)
+CAND_SIMPLE = {"実績は累進": "長く減配せず増配を続けている", "下限を設定": "1株配当に下限を決めている", "還元強化へ方針変更": "株主還元を強める向きに方針を変えた"}
+
+
+def nocut_years(ds):
+    n = 0
+    for i in range(len(ds) - 1, 0, -1):
+        if ds[i] and ds[i] > 0 and ds[i] >= ds[i - 1] - 0.005:
+            n += 1
+        else:
+            break
+    return n
+
+
+def candidate(r, ds, po):
+    """予備軍なら (★, 理由の一覧) を返す。理由は [見出し, 当てはまった中身, なぜ, 過去の宣言率%]"""
+    polc = dict(r.get("polc") or [])
+    kw = r.get("kw") or []
+    nc = nocut_years(ds)
+    meyasu, nocut = r.get("pot") is not None, nc >= 4
+    hipo = po is not None and 40 <= po <= 100
+    big = (r.get("net") or 0) >= 400
+    k = []
+    def add(key, detail):
+        t, rate, why = CAND_PATTERNS[key]
+        k.append([t, detail, why, rate])
+    if meyasu and nocut:
+        add("A", "配当性向%s%%を目安・%d年減配なし" % (fmt(r["pot"]), nc))
+    if meyasu and hipo:
+        add("B", "配当性向%s%%を目安・いまの配当性向%d%%" % (fmt(r["pot"]), round(po)))
+    if "中計" in kw and (big or nocut or meyasu):
+        add("C", "配当政策に中期経営計画の記載" + ("・純資産%s億円" % format(r["net"], ",") if big else "・%d年減配なし" % nc if nocut else "・配当性向の目安あり"))
+    if "自己株" in kw and nocut:
+        add("D", "配当政策に自己株式の記載・%d年減配なし" % nc)
+    if big and meyasu:
+        add("E", "純資産%s億円・配当性向%s%%を目安" % (format(r["net"], ","), fmt(r["pot"])))
+    if "増配を目指す" in polc:
+        add("F", polc["増配を目指す"])
+    if "導入を検討" in polc:
+        add("G", polc["導入を検討"])
+    st = 3 if (len(k) >= 2 or "導入を検討" in polc) else 2 if k else 0
+    if not k:
+        tr = track_record(ds, po)
+        if tr and nc >= 9:
+            k.append(["実績は累進", tr[0], CAND_SIMPLE["実績は累進"], None])
+        for t in ("下限を設定", "還元強化へ方針変更"):
+            if t in polc and po is not None and po <= 70 and nc >= 1:
+                k.append([t, polc[t], CAND_SIMPLE[t], None])
+        st = 1 if k else 0
+    if not st:
+        return None
+    # 小さくて利益が薄い会社は、過去ほとんど宣言していない(全体の0.2〜0.4倍)ので★を1つ下げる
+    roe = (r.get("roe") or [None])[-1]
+    small = r.get("net") is not None and r["net"] < 100
+    poor = (roe is not None and roe < 0.03) or sum(1 for v in (r.get("ocf") or []) if v < 0) >= 2
+    if small and poor:
+        st -= 1
+        if not st:
+            return None
+        k.append(["小型で利益が薄い", "純資産%s億円" % r["net"], "小さくて利益の薄い会社は、過去ほとんど宣言していないので★を1つ下げています", None])
+    return st, k
+
+
+def fmt(v):
+    return ("%g" % v) if v is not None else "?"
 
 
 def track_record(ds, payout):
@@ -603,29 +694,13 @@ def write_policy(fin):
             if r.get("pol"):
                 row = {"p": r["pol"], "q": r.get("polq", [])}
             else:
-                # 予備軍: 実績が累進配当に近い、または配当政策に下限・増配・方針見直しの書き方がある
-                # 予備軍: 宣言に近づいているサイン(文)を重く、実績と余力は補助として点数にする
-                k, sc = [], 0
-                for t, q in r.get("polc") or []:
-                    if t == "方針を見直し中":  # 古い読み方の名残
-                        continue
-                    k.append([t, q])
-                    sc += CAND_POINTS.get(t, 0)
-                # 文の手がかりだけの会社は、直近で減配しておらず配当性向に余裕があるものに絞る
-                if k and not (po is not None and po <= 70 and len(ds) >= 2 and ds[-1] >= ds[-2] - 0.005):
-                    k, sc = [], 0
-                tr = track_record(ds, po)
-                if tr:
-                    k.append(["実績は累進", tr[0]])
-                    sc += tr[1]
-                if not k:
+                # 予備軍: 過去の有報で確かめたパターン(★2〜3)と、簡単なサイン(★1)
+                got = candidate(r, ds, po)
+                if not got:
                     continue
-                eq = (r.get("eq") or [None])[-1]
-                fin_sec = r.get("sec") in ("銀行業", "保険業", "証券、商品先物取引業", "その他金融業")
-                if po is not None and po <= 50 and (fin_sec or (eq is not None and eq >= 0.5)):
-                    k.append(["余力あり", "配当性向%d%%" % round(po) + ("" if fin_sec else "・自己資本比率%d%%" % round(eq * 100))])
-                    sc += 1
-                row = {"p": [], "k": k, "sc": sc, "st": 3 if sc >= 5 else 2 if sc >= 3 else 1}
+                st, k = got
+                # 並べ替えの点数: ★、次に当てはまったパターンの数
+                row = {"p": [], "k": k, "st": st, "sc": st * 10 + sum(1 for x in k if x[3])}
             up = streak_of(ds)
             row.update({
                 "c": code, "n": r.get("n", ""), "s": r.get("sec", ""), "fy": (r.get("fy") or "")[:7],
@@ -739,6 +814,11 @@ def cmd_payout(days):
                 n += 1
             if parsed.get("candtext") and not r.get("pol"):
                 r["polc"] = parsed["candtext"]
+            r.pop("kw", None)
+            if parsed.get("kw"):
+                r["kw"] = parsed["kw"]
+            if parsed.get("net"):
+                r["net"] = round(parsed["net"] / 1e8)
     save_fin(fin)
     return n
 
