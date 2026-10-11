@@ -166,9 +166,12 @@ def parse_csv(text):
             # 1株配当・配当性向・株数は個別の表に載るので、こちらは個別を先に見る
             pref = (solo, cons) if field in ("div", "interim", "payout", "shares") else (cons, solo)
             pick = pref[0] if filled(pref[0]) >= 2 or not filled(pref[1]) else pref[1]
-            if filled(pick):
+            # IFRSなどへの移行の前後は、参考の2期分だけ別の基準が載ることがある(例: 東京海上)。
+            # 当期の値があり、より多くの期が載っている基準を正式なものとして使う
+            if filled(pick) and pick[-1] is not None and (best is None or filled(pick) > filled(best)):
                 best = pick
-                break
+            elif best is None and filled(pick):
+                best = pick
         out[field] = best
     if not out.get("opinc") or out["opinc"][-1] is None:
         for el in PL_OPINC:
@@ -577,6 +580,26 @@ def cmd_update(days, only_missing=False):
     return changed
 
 
+def cmd_refetch(days, codes=None):
+    """読み方を直したあと、最新の有報を読み直して数字を入れ直す(codes を指定すればその会社だけ)"""
+    fin = load_fin()
+    filings = recent_filings(days)
+    todo = [(c, x) for c, x in filings.items() if fin.get(c[0], {}).get(c) and (not codes or c in codes)]
+    print("有報", len(todo), "件を読み直します", flush=True)
+    n = 0
+    with ThreadPoolExecutor(4) as ex:
+        for (code, x), parsed in zip(todo, ex.map(lambda t: download(t[1]["docID"]), todo)):
+            if not parsed or not parsed.get("fyend"):
+                continue
+            old = fin[code[0]][code]
+            new = record(parsed, old.get("n"), old.get("sec", ""))
+            # 割り戻し・長期の系列などは、このあとの longdiv で付け直す
+            fin[code[0]][code] = new
+            n += 1
+    save_fin(fin)
+    return n
+
+
 def cmd_payout(days):
     """最新の有報の配当政策から「配当性向○%」型の方針だけを読み直して足す(一度きりの埋め合わせ用)"""
     fin = load_fin()
@@ -601,6 +624,9 @@ def main():
     ap = argparse.ArgumentParser()
     sub = ap.add_subparsers(dest="cmd", required=True)
     sub.add_parser("policy")
+    rf = sub.add_parser("refetch")
+    rf.add_argument("--days", type=int, default=400)
+    rf.add_argument("--codes", default="", help="カンマ区切り。空なら全社")
     po = sub.add_parser("payout")
     po.add_argument("--days", type=int, default=400)
     lg = sub.add_parser("longdiv")
@@ -614,6 +640,8 @@ def main():
     a = ap.parse_args()
     if a.cmd == "update":
         cmd_update(a.days, a.only_missing)
+    elif a.cmd == "refetch":
+        print("読み直した会社", cmd_refetch(a.days, [c for c in a.codes.split(",") if c]))
     elif a.cmd == "payout":
         print("配当性向○%型の方針の会社", cmd_payout(a.days))
     elif a.cmd == "policy":
