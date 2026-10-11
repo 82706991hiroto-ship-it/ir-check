@@ -166,6 +166,9 @@ def parse_csv(text):
             # 1株配当・配当性向・株数は個別の表に載るので、こちらは個別を先に見る
             pref = (solo, cons) if field in ("div", "interim", "payout", "shares") else (cons, solo)
             pick = pref[0] if filled(pref[0]) >= 2 or not filled(pref[1]) else pref[1]
+            # 連結を始めたばかりで連結が当期1期分だけでも、当期の判定は連結で行う(単体の1株利益で配当性向がずれないように)
+            if field not in ("div", "interim", "payout", "shares") and cons[-1] is not None:
+                pick = cons
             # IFRSなどへの移行の前後は、参考の2期分だけ別の基準が載ることがある(例: 東京海上)。
             # 当期の値があり、より多くの期が載っている基準を正式なものとして使う
             if filled(pick) and pick[-1] is not None and (best is None or filled(pick) > filled(best)):
@@ -268,7 +271,8 @@ def record(parsed, name, sector):
     rec = {"n": name, "sec": sector, "fy": parsed["fyend"]}
     for field in ("sales", "eps", "ocf", "cash"):
         s = tail(parsed.get(field))
-        if s and len(s) >= 2:
+        # 1株利益は当期1期分だけでも残す(配当性向に使う)。売上・CF・現金は推移を見るので2期以上
+        if s and (len(s) >= 2 or field == "eps"):
             rec[field] = [round(v / 1e6, 0) if field in MONEY else v for v in s]
     for field in ("eq", "roe"):
         s = tail(parsed.get(field))
