@@ -55,6 +55,8 @@ def golden(fin, info, special_map):
             if not close(got, g["連結の配当性向"], 0.03): ng("連結の配当性向(1株配当÷EPS)", got, g["連結の配当性向"])
         if "配当性向の目安" in g and not close(r.get("pot"), g["配当性向の目安"]):
             ng("配当方針の配当性向の目安", r.get("pot"), g["配当性向の目安"])
+        if "1株純資産" in g and not close(r.get("bps"), g["1株純資産"]):
+            ng("1株純資産(連結)", r.get("bps"), g["1株純資産"])
         if "直近の1株利益" in g and not close((r.get("eps") or [None])[-1], g["直近の1株利益"]):
             ng("直近の1株利益", (r.get("eps") or [None])[-1], g["直近の1株利益"])
     return bad

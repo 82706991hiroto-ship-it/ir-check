@@ -176,6 +176,23 @@ def parse_csv(text):
             elif best is None and filled(pick):
                 best = pick
         out[field] = best
+    # 1株純資産は連結を優先する。IFRSの会社には、連結の1株純資産を「自己資本比率」の項目名で載せているところがある
+    # (例: 伊藤忠商事。値が5を超えるので比率ではないと分かる)。連結が見つからなければ、単体は使わず入れない
+    cons_bps = None
+    for name in ("EquityAttributableToOwnersOfParentPerShareIFRS", "EquityAttributableToOwnersOfParentPerShareUSGAAP", "NetAssetsPerShare"):
+        sr = series(name, "Instant", "")
+        if sr[-1] is not None:
+            cons_bps = sr
+            break
+    if cons_bps is None:
+        sr = series("EquityToAssetRatioIFRS", "Instant", "")
+        if sr[-1] is not None and sr[-1] > 5:
+            cons_bps = sr
+    eps_cons = any(series(n, "Duration", "")[-1] is not None for n in SUMMARY["eps"])
+    if cons_bps is not None:
+        out["bps"] = cons_bps
+    elif eps_cons:
+        out["bps"] = None
     if not out.get("opinc") or out["opinc"][-1] is None:
         for el in PL_OPINC:
             for ctx in ("CurrentYearDuration", "CurrentYearDuration_NonConsolidatedMember"):
