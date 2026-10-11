@@ -44,6 +44,8 @@ POLICY = {
     "累進配当": re.compile(r"累進(的な)?配当|減配(は|を)?(せず|しない|行わない|行わず)|配当(の)?(水準)?を?維持(または|もしくは|又は|ないし)増配|前期(実績)?を下限"),
     "DOE": re.compile(r"DOE|ＤＯＥ|(株主|自己|純)資本配当率"),
 }
+# 「累進配当の導入を検討」はまだ宣言ではない(予備軍のいちばん強い手がかりにする)
+POLICY_CONSIDER = re.compile(r"検討(を開始|を始め|して|中|いた|する|を進め)")
 POLICY_NEG = re.compile(r"(累進配当|DOE|ＤＯＥ)[^。]{0,15}(は採用して|を採用して)(い|お)?(ません|ない|りません)")
 
 
@@ -52,7 +54,7 @@ def policy(text):
     text = re.sub(r"\s+", "", text or "")
     tags, quotes = [], []
     for sent in re.split(r"(?<=。)", text):
-        if POLICY_NEG.search(sent):
+        if POLICY_NEG.search(sent) or POLICY_CONSIDER.search(sent):
             continue
         for tag, p in POLICY.items():
             if p.search(sent):
@@ -72,10 +74,12 @@ def policy(text):
 
 # まだ累進配当・DOEを宣言していないが、配当政策の書き方がそれに近い会社(予備軍)の手がかり
 CAND_TEXT = {
+    "導入を検討": re.compile(r"(累進(的な)?配当|DOE|ＤＯＥ|(株主|自己|純)資本配当率)[^。]{0,30}検討(を開始|を始め|して|中|いた|する|を進め)"),
     # 1株配当の額に下限(配当性向の下限は利益しだいなので含めない)
     "下限を設定": re.compile(r"\d+(\.\d+)?円[^。%％]{0,10}(を下限|を最低|を下回らない)|下限配当|最低配当|配当(金)?の下限(額)?を[^。%％]{0,6}円"),
     "増配を目指す": re.compile(r"(継続的|持続的|安定的|段階的|長期的)(な|に)増配|増配(を|の)(基本|継続|実現|目指|目標)"),
-    "方針を見直し中": re.compile(r"(配当|株主還元)(の)?方針[^。]{0,15}(見直|変更)"),
+    # 方針の変更は、還元を強める向きのものだけ(配当性向の基準の付け替えなどは除く)
+    "還元強化へ方針変更": re.compile(r"(配当|株主還元)(の)?方針[^。]{0,15}(見直|変更)(?=[^。]*(強化|充実|拡充|拡大|増配|引き上げ|引上げ|DOE|ＤＯＥ|累進|下限))|(強化|充実|拡充|拡大|増配|引き上げ|引上げ)[^。]{0,60}(配当|株主還元)(の)?方針[^。]{0,15}(見直|変更)"),
 }
 
 
@@ -566,6 +570,10 @@ def streak_of(s):
     return up
 
 
+# 予備軍の点数。宣言に近いサインほど重い(★3: 5点以上、★2: 3〜4点、★1: 1〜2点)
+CAND_POINTS = {"導入を検討": 4, "下限を設定": 3, "増配を目指す": 3, "還元強化へ方針変更": 2}
+
+
 def track_record(ds, payout):
     """宣言はないが実績が累進配当に近いか。(理由の文) か None
 
@@ -580,7 +588,8 @@ def track_record(ds, payout):
     ups = sum(1 for k in range(1, len(s)) if s[k] > s[k - 1] + 0.005)
     if ups * 2 < len(s) - 1 or payout is None or payout > 70:
         return None
-    return "%d期減配なし(うち増配%d回)・配当性向%d%%" % (len(s), ups, round(payout))
+    pts = 2 if ups == len(s) - 1 else 1 if ups * 10 >= (len(s) - 1) * 7 else 0
+    return "%d期減配なし(うち増配%d回)・配当性向%d%%" % (len(s), ups, round(payout)), pts
 
 
 def write_policy(fin):
@@ -595,17 +604,28 @@ def write_policy(fin):
                 row = {"p": r["pol"], "q": r.get("polq", [])}
             else:
                 # 予備軍: 実績が累進配当に近い、または配当政策に下限・増配・方針見直しの書き方がある
-                k = []
+                # 予備軍: 宣言に近づいているサイン(文)を重く、実績と余力は補助として点数にする
+                k, sc = [], 0
+                for t, q in r.get("polc") or []:
+                    if t == "方針を見直し中":  # 古い読み方の名残
+                        continue
+                    k.append([t, q])
+                    sc += CAND_POINTS.get(t, 0)
+                # 文の手がかりだけの会社は、直近で減配しておらず配当性向に余裕があるものに絞る
+                if k and not (po is not None and po <= 70 and len(ds) >= 2 and ds[-1] >= ds[-2] - 0.005):
+                    k, sc = [], 0
                 tr = track_record(ds, po)
                 if tr:
-                    k.append(["実績は累進", tr])
-                k += [[t, q] for t, q in r.get("polc") or []]
-                # 文の手がかりだけの会社は、直近で減配しておらず配当性向に余裕があるものに絞る
-                if not tr and k and not (po is not None and po <= 70 and len(ds) >= 2 and ds[-1] >= ds[-2] - 0.005):
-                    k = []
+                    k.append(["実績は累進", tr[0]])
+                    sc += tr[1]
                 if not k:
                     continue
-                row = {"p": [], "k": k}
+                eq = (r.get("eq") or [None])[-1]
+                fin_sec = r.get("sec") in ("銀行業", "保険業", "証券、商品先物取引業", "その他金融業")
+                if po is not None and po <= 50 and (fin_sec or (eq is not None and eq >= 0.5)):
+                    k.append(["余力あり", "配当性向%d%%" % round(po) + ("" if fin_sec else "・自己資本比率%d%%" % round(eq * 100))])
+                    sc += 1
+                row = {"p": [], "k": k, "sc": sc, "st": 3 if sc >= 5 else 2 if sc >= 3 else 1}
             up = streak_of(ds)
             row.update({
                 "c": code, "n": r.get("n", ""), "s": r.get("sec", ""), "fy": (r.get("fy") or "")[:7],
@@ -709,7 +729,11 @@ def cmd_payout(days):
             if not parsed:
                 continue
             r = fin[code[0]][code]
-            r.pop("pot", None); r.pop("potq", None); r.pop("polc", None)
+            r.pop("pot", None); r.pop("potq", None); r.pop("polc", None); r.pop("pol", None); r.pop("polq", None)
+            if parsed.get("policy") is not None:
+                r["pc"] = 1
+                if parsed["policy"][0]:
+                    r["pol"], r["polq"] = parsed["policy"]
             if parsed.get("potarget"):
                 r["pot"], r["potq"] = parsed["potarget"]
                 n += 1

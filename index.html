@@ -291,6 +291,7 @@
   .tag.p-rui { background: var(--accent-soft); color: var(--accent); }
   .tag.p-doe { background: var(--ok-soft); color: var(--ok); }
   .tag.p-cand { background: var(--mid-soft); color: var(--mid); }
+  .tag.p-cand .st-off { opacity: .3; }
   .tag.p-why { background: transparent; border: 1px solid var(--line); font-weight: 600; }
   details.quote q b { display: block; font-size: 11.5px; color: var(--text); }
   .tag.room { background: var(--good-soft); color: var(--good); }
@@ -485,12 +486,14 @@
   <div class="notes" data-view="find">
     <p><span class="note-label">拾い方</span>有報の配当政策の文章に「累進配当」「減配しない」「維持または増配」「前期実績を下限」などがあれば<b>累進配当</b>、
       「DOE」「株主資本配当率」「純資産配当率」などがあれば<b>DOE</b>としています。「DOEも踏まえて判断」のような軽い書き方も含むので、根拠の文で確かめてください。</p>
-    <p><span class="note-label">予備軍</span>宣言はないが、次のどれかに当てはまる会社です。
-      <b>実績は累進</b>: 直近10期(記録が6〜9期ならその全部)で一度も減配せず、半分以上の期で増配し、配当性向が70%以下。
-      <b>下限を設定</b>: 「年間配当○円を下限」のように1株配当の下限がある。
-      <b>増配を目指す</b>: 「継続的な増配」「増配を基本」などの書き方がある。
-      <b>方針を見直し中</b>: 「配当方針を見直し」「株主還元方針を変更」などの書き方がある。
-      文の手がかりだけの会社は、直近で減配しておらず配当性向が70%以下のものに絞っています。普通配当(記念・特別配当を除く)で数えます。</p>
+    <p><span class="note-label">予備軍</span>宣言はないが、宣言に近づいているサインがある会社です。サインを点数にして★1〜3で示し、★の多い順に並べます(5点以上★3・3〜4点★2・1〜2点★1)。
+      <b>導入を検討</b>(4点): 「累進配当の導入を検討」のように、検討していると書いている。
+      <b>下限を設定</b>(3点): 「年間配当○円を下限」のように1株配当の下限がある(累進配当の一歩手前)。
+      <b>増配を目指す</b>(3点): 「継続的な増配を基本」などの書き方がある。
+      <b>還元強化へ方針変更</b>(2点): 株主還元を強める向きに配当方針を変えた。
+      <b>実績は累進</b>(0〜2点): 直近10期(記録が6〜9期ならその全部)で一度も減配せず半分以上の期で増配し、配当性向70%以下。毎期増配なら2点、7割以上の期で増配なら1点。
+      <b>余力あり</b>(1点): 配当性向50%以下で、自己資本比率50%以上(金融は配当性向だけ)。
+      文の手がかりは、直近で減配しておらず配当性向が70%以下の会社だけ数えます。普通配当(記念・特別配当を除く)で数えます。</p>
     <p><span class="note-label">反映の時期</span>有報は年1回、決算から約3か月後に出ます。決算短信や中期経営計画で新しく宣言した会社は、次の有報が出るまでここに載りません。
       数字は毎週、新しく提出された有報で更新しています(<span id="built"></span>)。</p>
     <p><span class="note-label">株価</span>「株価・予想を見る」で開いたYahoo!ファイナンスの参考指標の欄(色の付いた所)をまとめてコピーして戻ると、株価と予想配当が入ります。株価だけのコピーでもかまいません。入れた値はこの端末に保存し、チェックシートでも使います。</p>
@@ -2108,6 +2111,8 @@
       return true;
     });
     var key = $("sort").value;
+    // 予備軍は、コード順のときも★(点数)の多い順に
+    if (pol === "cand" && key === "code") out.sort(function (a, b) { return (b.sc || 0) - (a.sc || 0) || a.c.localeCompare(b.c); });
     if (key === "up") out.sort(function (a, b) { return b.up - a.up || a.c.localeCompare(b.c); });
     if (key === "po") out.sort(function (a, b) { return (a.po == null ? 999 : a.po) - (b.po == null ? 999 : b.po); });
     // 5年分そろう会社を先に、4年で代用した会社はその後に並べる
@@ -2141,7 +2146,7 @@
     var li = document.createElement("li");
     li.className = "co";
     var tags = r.p.map(function (t) { return '<span class="tag ' + (t === "DOE" ? "p-doe" : "p-rui") + '">' + esc(t) + '</span>'; }).join("");
-    if (r.k) tags = '<span class="tag p-cand">予備軍</span>' + r.k.map(function (k) { return '<span class="tag p-why">' + esc(k[0]) + '</span>'; }).join("");
+    if (r.k) tags = '<span class="tag p-cand">予備軍 ' + "★★★".slice(0, r.st || 1) + '<span class="st-off">' + "★★★".slice(r.st || 1) + '</span></span>' + r.k.map(function (k) { return '<span class="tag p-why">' + esc(k[0]) + '</span>'; }).join("");
     if (r.po != null && r.po < 30) tags += '<span class="tag room">配当性向30%未満・増配余力</span>';
     li.innerHTML =
       '<div class="co-head"><span class="co-name"><span class="co-code">' + esc(r.c) + '</span>' + esc(r.n.normalize("NFKC")) + '</span>' +
@@ -2168,7 +2173,10 @@
     // 全体の社数は、宣言済みと予備軍を分けて数える
     var all = rows.filter(function (r) { return pol === "cand" ? !r.p.length : r.p.length; }).length;
     $("count").innerHTML = "<strong>" + list.length.toLocaleString("ja-JP") + "</strong> 社" +
-      (pol === "cand" ? "(予備軍)" : "") + (list.length !== all ? "(全" + all + "社中)" : "");
+      (pol === "cand" ? "(予備軍)" : "") + (list.length !== all ? "(全" + all + "社中)" : "") +
+      (pol === "cand" ? '<br><small>' + [3, 2, 1].map(function (n) {
+        return "★".repeat(n) + " " + list.filter(function (r) { return (r.st || 1) === n; }).length + "社";
+      }).join(" ・ ") + '</small>' : "");
     var ul = $("list");
     ul.innerHTML = "";
     if (!list.length) { ul.innerHTML = '<li class="empty">条件に合う会社はありません。</li>'; }
