@@ -2111,8 +2111,8 @@
       return true;
     });
     var key = $("sort").value;
-    // 予備軍は、コード順のときも★(点数)の多い順に
-    if (pol === "cand" && key === "code") out.sort(function (a, b) { return (b.sc || 0) - (a.sc || 0) || a.c.localeCompare(b.c); });
+    // 予備軍の★(点数)が多い順。同じ点数なら連続増配が長い順
+    if (key === "star") out.sort(function (a, b) { return (b.sc || 0) - (a.sc || 0) || b.up - a.up || a.c.localeCompare(b.c); });
     if (key === "up") out.sort(function (a, b) { return b.up - a.up || a.c.localeCompare(b.c); });
     if (key === "po") out.sort(function (a, b) { return (a.po == null ? 999 : a.po) - (b.po == null ? 999 : b.po); });
     // 5年分そろう会社を先に、4年で代用した会社はその後に並べる
@@ -2210,6 +2210,8 @@
     });
     pol = f.pol || "";
     Array.prototype.forEach.call(document.querySelectorAll("#polSeg button"), function (x) { x.classList.toggle("active", x.dataset.v === pol); });
+    syncStarSort(false);
+    if (pol === "cand" && f.sort === "star") $("sort").value = "star";
     if (f.shown > PAGE) shown = f.shown;
     return f;
   }
@@ -2224,9 +2226,26 @@
   }
   window.irFindReloadPrices = function () { prices = loadPrices(); if (rows.length) render(); };
 
+  // 「★が多い順」は予備軍のときだけ選べる(iPhoneのSafariは option の hidden が効かないので出し入れする)。
+  // 予備軍に切り替えたときは★順にし、ほかに移るときは★順をコード順に戻す
+  function syncStarSort(entering) {
+    var sel = $("sort"), opt = sel.querySelector('option[value="star"]');
+    if (pol === "cand") {
+      if (!opt) {
+        opt = document.createElement("option"); opt.value = "star"; opt.textContent = "★が多い順";
+        sel.insertBefore(opt, sel.firstChild);
+      }
+      if (entering) sel.value = "star";
+    } else if (opt) {
+      if (sel.value === "star") sel.value = "code";
+      opt.remove();
+    }
+  }
   Array.prototype.forEach.call(document.querySelectorAll("#polSeg button"), function (b) {
     b.addEventListener("click", function () {
+      var was = pol;
       pol = b.dataset.v;
+      syncStarSort(pol === "cand" && was !== "cand");
       Array.prototype.forEach.call(document.querySelectorAll("#polSeg button"), function (x) { x.classList.toggle("active", x === b); });
       reset();
     });
