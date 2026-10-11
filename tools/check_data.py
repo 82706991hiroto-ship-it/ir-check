@@ -81,6 +81,18 @@ def cross(fin, info, split_map, special_map):
             if 2 <= k <= 10 and abs(a / b / k - 1) < 0.08 and abs((ea / eb) / k - 1) < 0.25:
                 msgs.append("1株配当と1株利益が同じ期に約1/%dになっている(%s→%s円)。株式分割の割り戻し漏れの可能性" % (k, a, b))
                 break
+        # 1株利益・1株純資産・ROE は同じ決算から出るので、ROE ≒ 1株利益 ÷ 1株純資産(期中平均との差で多少ずれる)。
+        # 大きく外れていれば、基準(連結/単体・日本基準/IFRS)や株式分割の割り戻しの取り違えを疑う
+        e, b, roe = (r.get("eps") or [None])[-1], r.get("bps"), (r.get("roe") or [None])[-1]
+        if e and b and roe and e > 0 and b > 0 and roe > 0.02:
+            q = (e / b) / roe
+            if q < 0.35 or q > 3:
+                msgs.append("1株利益÷1株純資産(%.1f%%)とROE(%.1f%%)が合わない。基準や分割の取り違えの可能性" % (e / b * 100, roe * 100))
+        if e is not None and roe is not None and abs(roe) > 0.01 and (e > 0) != (roe > 0):
+            msgs.append("1株利益とROEの符号が合わない")
+        eq = (r.get("eq") or [None])[-1]
+        if eq is not None and not (0 < eq <= 1):
+            msgs.append("自己資本比率が0〜100%%の外(%s)" % eq)
         if r.get("divchk"):
             msgs.append("期の途中の株式分割で1株配当を割り戻した値を確かめてください(有報の値 %s)" % r.get("div_raw"))
         if msgs:

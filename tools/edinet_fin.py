@@ -214,7 +214,9 @@ def adjust_div(divs, shares, interims=None):
     for t in range(1, len(divs)):
         f = snap(shares[t] / shares[t - 1]) if shares[t] and shares[t - 1] else 1.0
         it = interims[t]
-        if f and f >= 1.5 and it and 0 < it < divs[t] and divs[t - 1] > 0:
+        # 混ざった年は、期末分が分割後の小さな額なので、年間の合計が前期より下がって見える。
+        # 下がっていなければ、有報が前の期をもう分割後の額に直して載せている(例: 三井住友FG)ので割り戻さない
+        if f and f >= 1.5 and it and 0 < it < divs[t] and divs[t - 1] > 0 and divs[t] / divs[t - 1] < 0.85:
             # 中間配当が分割前の水準(前期の年間配当の半分前後)なら、その年は混ざっている。
             # 分割後の水準なら前期の半分÷倍率前後になるので、その間(0.5÷√倍率)で見分ける
             if it / divs[t - 1] > 0.5 / f ** 0.5:
@@ -269,6 +271,18 @@ def tail(series):
 def record(parsed, name, sector):
     """fin/N.json の1社分。キーはチェックシートの scoreRecord が読むもの。"""
     rec = {"n": name, "sec": sector, "fy": parsed["fyend"]}
+    # 当期の欄が空(「－」)の項目は、古い期の値が「当期」として使われないように、その項目ごと入れない
+    for field in ("sales", "ocf", "cash", "eq"):
+        raw_s = parsed.get(field)
+        if raw_s and raw_s[-1] is None:
+            parsed[field] = None
+    # ROE は赤字の期に「－」になる。当期が空なら 1株利益 ÷ 1株純資産 で当期を出す(無ければ入れない)
+    roe_s, eps_s, bps_s = parsed.get("roe"), parsed.get("eps"), parsed.get("bps")
+    if roe_s and roe_s[-1] is None:
+        if eps_s and eps_s[-1] is not None and bps_s and bps_s[-1]:
+            parsed["roe"] = [None] * (len(roe_s) - 1) + [round(eps_s[-1] / bps_s[-1], 4)]
+        else:
+            parsed["roe"] = None
     for field in ("sales", "eps", "ocf", "cash"):
         s = tail(parsed.get(field))
         # 1株利益は当期1期分だけでも残す(配当性向に使う)。売上・CF・現金は推移を見るので2期以上
