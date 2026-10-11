@@ -450,10 +450,9 @@
     <div class="filters">
       <div class="wide">
         <div class="seg" id="polSeg">
-          <button type="button" data-v="" class="active">宣言済み</button>
+          <button type="button" data-v="" class="active">すべて</button>
           <button type="button" data-v="累進配当">累進配当</button>
           <button type="button" data-v="DOE">DOE</button>
-          <button type="button" data-v="both">両方</button>
           <button type="button" data-v="cand">予備軍</button>
         </div>
       </div>
@@ -2107,7 +2106,7 @@
       // 予備軍(宣言なし)は「予備軍」を選んだときだけ出す
       if (pol === "cand" ? r.p.length : !r.p.length) return false;
       if (pol === "cand" && !candAll && r.st !== 2) return false;
-      if (pol === "both" ? r.p.length < 2 : pol && pol !== "cand" && r.p.indexOf(pol) === -1) return false;
+      if (pol && pol !== "cand" && r.p.indexOf(pol) === -1) return false;
       if (sec && r.s !== sec) return false;
       if (po === "low" && !(r.po != null && r.po < 30)) return false;
       if (po === "mid" && !(r.po != null && r.po >= 30 && r.po <= 50)) return false;
@@ -2187,7 +2186,8 @@
     // 全体の社数は、宣言済みと予備軍を分けて数える
     var all = rows.filter(function (r) { return pol === "cand" ? !r.p.length && (candAll || r.st === 2) : r.p.length; }).length;
     $("count").innerHTML = "<strong>" + list.length.toLocaleString("ja-JP") + "</strong> 社" +
-      (pol === "cand" ? "(予備軍)" : "") + (list.length !== all ? "(全" + all + "社中)" : "") +
+      (pol === "cand" ? "(予備軍)" + (list.length !== all ? "(全" + all + "社中)" : "")
+        : "(" + (pol ? pol + "を宣言" : "累進配当・DOEのどちらかを宣言") + (list.length !== all ? "・全" + all + "社中" : "") + ")") +
       (pol === "cand" ? '<br><small>テーマ2つ以上 ' + rows.filter(function (r) { return r.st === 2; }).length + '社' +
         ' ・ <button type="button" class="link" id="candMore">' + (candAll ? "テーマ1つの会社を隠す" : "テーマ1つの会社も見る(" + rows.filter(function (r) { return r.st === 1; }).length + "社)") + '</button></small>' : "");
     var cm = $("candMore");
@@ -2223,7 +2223,7 @@
       if (el.tagName === "SELECT" && !Array.prototype.some.call(el.options, function (o) { return o.value === f[id]; })) return;
       el.value = f[id];
     });
-    pol = f.pol || "";
+    pol = f.pol === "both" ? "" : f.pol || "";
     candAll = !!f.candAll;
     Array.prototype.forEach.call(document.querySelectorAll("#polSeg button"), function (x) { x.classList.toggle("active", x.dataset.v === pol); });
     syncStarSort(false);
