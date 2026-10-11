@@ -182,7 +182,7 @@ def parse_csv(text):
     out["candtext"] = candidate_text(ptext) if ptext else []
     for field, names in SUMMARY.items():
         kind = "Instant" if field in ("eq", "cash", "bps", "shares") else "Duration"
-        best = None
+        best, best_rank = None, None
         for name in names:
             cons, solo = series(name, kind, ""), series(name, kind, "_NonConsolidatedMember")
             # 連結を使う。連結の値が1期分以下(連結を始めたばかりなど)なら個別。
@@ -192,12 +192,18 @@ def parse_csv(text):
             # 連結を始めたばかりで連結が当期1期分だけでも、当期の判定は連結で行う(単体の1株利益で配当性向がずれないように)
             if field not in ("div", "interim", "payout", "shares") and cons[-1] is not None:
                 pick = cons
+            # 連結をやめた会社など、片方にしか当期の値が無いときは当期のある方を使う
+            # (例: JTP。連結の古い2期だけが残り、当期は単体にしかない。古い連結の値を「当期」にしない)
+            if pick[-1] is None:
+                other = solo if pick is cons else cons
+                if other[-1] is not None:
+                    pick = other
             # IFRSなどへの移行の前後は、参考の2期分だけ別の基準が載ることがある(例: 東京海上)。
             # 当期の値があり、より多くの期が載っている基準を正式なものとして使う
-            if filled(pick) and pick[-1] is not None and (best is None or filled(pick) > filled(best)):
-                best = pick
-            elif best is None and filled(pick):
-                best = pick
+            # 連結(1株配当などは個別)の当期の値を、別の側(例: 持株会社の単体)の当期より優先する(例: リガクHD)
+            rank = (pick[-1] is not None, pick is pref[0], filled(pick))
+            if filled(pick) and (best is None or rank > best_rank):
+                best, best_rank = pick, rank
         out[field] = best
     # 1株純資産は連結を優先する。IFRSの会社には、連結の1株純資産を「自己資本比率」の項目名で載せているところがある
     # (例: 伊藤忠商事。値が5を超えるので比率ではないと分かる)。連結が見つからなければ、単体は使わず入れない
@@ -312,7 +318,7 @@ def record(parsed, name, sector):
     """fin/N.json の1社分。キーはチェックシートの scoreRecord が読むもの。"""
     rec = {"n": name, "sec": sector, "fy": parsed["fyend"]}
     # 当期の欄が空(「－」)の項目は、古い期の値が「当期」として使われないように、その項目ごと入れない
-    for field in ("sales", "ocf", "cash", "eq"):
+    for field in ("sales", "ocf", "cash", "eq", "eps", "bps"):
         raw_s = parsed.get(field)
         if raw_s and raw_s[-1] is None:
             parsed[field] = None

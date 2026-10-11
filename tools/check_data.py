@@ -62,9 +62,9 @@ def golden(fin, info, special_map):
     return bad
 
 
-def cross(fin, info, split_map, special_map):
+def cross(fin, info, split_map, special_map, state=None):
     """{code: [要確認の理由]}"""
-    out = {}
+    out, state = {}, state or {}
     for code, r in fin.items():
         msgs = []
         v = info.get(code)
@@ -73,6 +73,15 @@ def cross(fin, info, split_map, special_map):
         # HAITOの内蔵データ(有報14期)とチェックシートの有報データの1株配当が、同じ期でも1期ずれでも合わない
         if h and d and h[0] > 0 and d[-1] > 0 and not close(h[0], d[-1], 0.03) and not (len(d) > 1 and close(h[0], d[-2], 0.03)) and not (len(h) > 1 and close(h[1], d[-1], 0.03)):
             msgs.append("1株配当がデータ間で合わない(%s円と%s円)" % (h[0], d[-1]))
+        # 過去の期も比べる(期の途中の分割の割り戻し方が食い違っていないか)。チェックシートは決算後の分割も
+        # 割り戻し済みでHAITOの内蔵データは分割前なので、最新期に対する比(推移の形)で比べる
+        elif h and d and h[0] > 0 and d[-1] > 0 and state.get(code, "")[:7] == (r.get("fy") or "")[:7]:
+            hs, n = list(reversed(h)), min(len(h), len(d), 5)
+            for i in range(2, n + 1):
+                x, y = hs[-i], d[-i]
+                if x > 0 and y > 0 and abs(x / hs[-1] - y / d[-1]) > max(0.03 * y / d[-1], 0.011):
+                    msgs.append("%d期前の1株配当がデータ間で合わない(株式分割の割り戻し方の違いの可能性)" % (i - 1))
+                    break
         # 株式分割の取りこぼし: 1株配当と1株利益が同じ期に、ほぼ同じ割合で 1/2・1/3… に下がっている
         dd, ee = r.get("div") or [], r.get("eps") or []
         for i in range(1, min(len(dd), len(ee))):
@@ -111,7 +120,9 @@ def main():
     split_map, special_map = js_map(html, "SPLIT_MAP"), js_map(html, "SPECIAL_MAP")
     fin = load_fin()
 
-    flags = cross(fin, info, split_map, special_map)
+    spath = os.path.join(os.path.dirname(os.path.abspath(a.haito)), "tools", "edinet", "state.json")
+    state = json.load(open(spath)) if os.path.exists(spath) else {}
+    flags = cross(fin, info, split_map, special_map, state)
     with open(os.path.join(ROOT, "checks.json"), "w", encoding="utf-8") as f:
         json.dump({"built": dt.date.today().isoformat(), "flags": dict(sorted(flags.items()))}, f, ensure_ascii=False, separators=(",", ":"))
     print("要確認の銘柄", len(flags))
