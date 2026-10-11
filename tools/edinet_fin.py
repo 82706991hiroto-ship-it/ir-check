@@ -70,6 +70,28 @@ def policy(text):
     return tags, quotes[:2]
 
 
+# まだ累進配当・DOEを宣言していないが、配当政策の書き方がそれに近い会社(予備軍)の手がかり
+CAND_TEXT = {
+    # 1株配当の額に下限(配当性向の下限は利益しだいなので含めない)
+    "下限を設定": re.compile(r"\d+(\.\d+)?円[^。%％]{0,10}(を下限|を最低|を下回らない)|下限配当|最低配当|配当(金)?の下限(額)?を[^。%％]{0,6}円"),
+    "増配を目指す": re.compile(r"(継続的|持続的|安定的|段階的|長期的)(な|に)増配|増配(を|の)(基本|継続|実現|目指|目標)"),
+    "方針を見直し中": re.compile(r"(配当|株主還元)(の)?方針[^。]{0,15}(見直|変更)"),
+}
+
+
+def candidate_text(text):
+    """予備軍の手がかり [(種類, 根拠の文)]。種類ごとに1つ"""
+    text = re.sub(r"\s+", "", text or "")
+    out = {}
+    for sent in re.split(r"(?<=。)", text):
+        for tag, p in CAND_TEXT.items():
+            m = p.search(sent)
+            if m and tag not in out:
+                a = max(0, m.start() - 50)
+                out[tag] = sent if len(sent) <= 140 else ("…" if a > 0 else "") + sent[a:a + 130] + ("…" if a + 130 < len(sent) else "")
+    return list(out.items())
+
+
 # 「配当性向○%を目安(目標・程度・以上)」のように、利益に連動して配当を決める方針。
 # 利益が落ちると配当も下がりやすいので、高い配当性向の会社の説明に使う
 PAYOUT_TARGET = re.compile(r"配当性向[^。]{0,25}?(\d{2,3}(?:\.\d)?)\s*[%％](?:程度|前後|を目安|を目途|を目処|目途|目処|以上|を目標|目標|を基準|水準|を基本|を下限)")
@@ -157,6 +179,7 @@ def parse_csv(text):
     ptext = facts.get(("jpcrp_cor:DividendPolicyTextBlock", "FilingDateInstant"))
     out["policy"] = policy(ptext) if ptext else None
     out["potarget"] = payout_target(ptext) if ptext else None
+    out["candtext"] = candidate_text(ptext) if ptext else []
     for field, names in SUMMARY.items():
         kind = "Instant" if field in ("eq", "cash", "bps", "shares") else "Duration"
         best = None
@@ -339,6 +362,8 @@ def record(parsed, name, sector):
             rec["pol"], rec["polq"] = tags, quotes
     if parsed.get("potarget"):
         rec["pot"], rec["potq"] = parsed["potarget"]
+    if parsed.get("candtext") and not rec.get("pol"):
+        rec["polc"] = parsed["candtext"]
     return rec
 
 
@@ -535,23 +560,54 @@ def streak_of(s):
     return up
 
 
+def track_record(ds, payout):
+    """宣言はないが実績が累進配当に近いか。(理由の文) か None
+
+    直近10期(記録が6〜9期ならその全部)で一度も減配せず、半分以上の期で増配していて、
+    配当性向が70%以下(無理をしていない)なら「実績は累進」とみる。
+    """
+    s = ds[-10:]
+    if len(s) < 6 or any(v is None or v <= 0 for v in s):
+        return None
+    if any(s[k] < s[k - 1] - 0.005 for k in range(1, len(s))):
+        return None
+    ups = sum(1 for k in range(1, len(s)) if s[k] > s[k - 1] + 0.005)
+    if ups * 2 < len(s) - 1 or payout is None or payout > 70:
+        return None
+    return "%d期減配なし(うち増配%d回)・配当性向%d%%" % (len(s), ups, round(payout))
+
+
 def write_policy(fin):
-    """累進配当・DOEの会社の一覧(policy.json)。一覧ページが読む小さなデータ"""
+    """累進配当・DOEの会社と、その予備軍の一覧(policy.json)。一覧ページが読む小さなデータ"""
     rows = []
     for m in fin.values():
         for code, r in m.items():
-            if not r.get("pol"):
-                continue
             d, e = r.get("div") or [], r.get("eps") or []
             ds = r.get("dlo") or r.get("dl") or d  # 記念・特別配当を除いた普通配当で数える
+            po = round(d[-1] / e[-1] * 100, 1) if d and e and e[-1] > 0 else None
+            if r.get("pol"):
+                row = {"p": r["pol"], "q": r.get("polq", [])}
+            else:
+                # 予備軍: 実績が累進配当に近い、または配当政策に下限・増配・方針見直しの書き方がある
+                k = []
+                tr = track_record(ds, po)
+                if tr:
+                    k.append(["実績は累進", tr])
+                k += [[t, q] for t, q in r.get("polc") or []]
+                # 文の手がかりだけの会社は、直近で減配しておらず配当性向に余裕があるものに絞る
+                if not tr and k and not (po is not None and po <= 70 and len(ds) >= 2 and ds[-1] >= ds[-2] - 0.005):
+                    k = []
+                if not k:
+                    continue
+                row = {"p": [], "k": k}
             up = streak_of(ds)
-            rows.append({
-                "c": code, "n": r.get("n", ""), "s": r.get("sec", ""), "p": r["pol"], "fy": (r.get("fy") or "")[:7],
+            row.update({
+                "c": code, "n": r.get("n", ""), "s": r.get("sec", ""), "fy": (r.get("fy") or "")[:7],
                 # 一覧の小さな棒も普通配当で(記念配当の翌年が赤くならないように)
                 "d": (r["dlo"][-len(d):] if r.get("dlo") and d else d),
-                "po": round(d[-1] / e[-1] * 100, 1) if d and e and e[-1] > 0 else None,
-                "up": up, "q": r.get("polq", []),
+                "po": po, "up": up,
             })
+            rows.append(row)
             # 記録の始まりまで増配が続いている会社は、それより前も増配だったかもしれない(「N期以上」と出す)
             if up and up == len(ds) - 1:
                 rows[-1]["upm"] = 1
@@ -571,7 +627,7 @@ def write_policy(fin):
            "rows": rows}
     with open(os.path.join(ROOT, "policy.json"), "w", encoding="utf-8") as f:
         json.dump(out, f, ensure_ascii=False, separators=(",", ":"))
-    return len(rows)
+    return sum(1 for x in rows if x["p"])
 
 
 def cmd_update(days, only_missing=False):
@@ -636,7 +692,7 @@ def cmd_refetch(days, codes=None):
 
 
 def cmd_payout(days):
-    """最新の有報の配当政策から「配当性向○%」型の方針だけを読み直して足す(一度きりの埋め合わせ用)"""
+    """最新の有報の配当政策から「配当性向○%」型の方針と予備軍の手がかりだけを読み直して足す(埋め合わせ用)"""
     fin = load_fin()
     filings = recent_filings(days)
     todo = [(c, x) for c, x in filings.items() if fin.get(c[0], {}).get(c) and fin[c[0]][c].get("fy", "") <= x["periodEnd"]]
@@ -647,10 +703,12 @@ def cmd_payout(days):
             if not parsed:
                 continue
             r = fin[code[0]][code]
-            r.pop("pot", None); r.pop("potq", None)
+            r.pop("pot", None); r.pop("potq", None); r.pop("polc", None)
             if parsed.get("potarget"):
                 r["pot"], r["potq"] = parsed["potarget"]
                 n += 1
+            if parsed.get("candtext") and not r.get("pol"):
+                r["polc"] = parsed["candtext"]
     save_fin(fin)
     return n
 
