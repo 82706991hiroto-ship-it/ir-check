@@ -484,7 +484,7 @@ def attach_long(fin, haito_html):
                 r["div_raw"], r["div"] = d, adj
                 # 古い期は「生の値 ÷ 整数」になっているはず。そうでなければ割り戻しを人が確かめる
                 ks = [d[i] / adj[i] for i in range(len(d) - 1) if adj[i] > 0 and d[i] > 0]
-                if not ks or any(abs(k / round(k) - 1) > 0.03 or round(k) < 1 for k in ks):
+                if not ks or any(round(k) < 1 or abs(k / round(k) - 1) > 0.03 for k in ks):
                     r["divchk"] = 1
             else:
                 continue
