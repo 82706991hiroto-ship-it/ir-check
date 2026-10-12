@@ -233,6 +233,12 @@ def parse_csv(text):
         out["bps"] = cons_bps
     elif eps_cons:
         out["bps"] = None
+    # 株価収益率(PER)。有報の期末時点の株価が分かるので、PBR(= PER × 1株利益 ÷ 1株純資産)を出せる
+    for name in ("PriceEarningsRatioIFRS", "PriceEarningsRatioUSGAAP", "PriceEarningsRatio"):
+        v = by_local.get((name, "CurrentYearDuration"))
+        if v is not None:
+            out["per"] = v
+            break
     # 純資産(会社の大きさ。予備軍の判定に使う)。連結、無ければ単体
     for suf in ("", "_NonConsolidatedMember"):
         v = by_local.get(("NetAssets", "CurrentYearInstant" + suf))
@@ -391,6 +397,8 @@ def record(parsed, name, sector):
         rec["kw"] = parsed["kw"]
     if parsed.get("net"):
         rec["net"] = round(parsed["net"] / 1e8)  # 億円
+    if parsed.get("per") and parsed["per"] > 0:
+        rec["per"] = round(parsed["per"], 2)
     return rec
 
 
@@ -587,14 +595,16 @@ def streak_of(s):
     return up
 
 
-# 予備軍のテーマ。3年前・6年前・9年前の有報で「その後に累進配当・DOEを宣言したか」を確かめ、
-# テーマが2つ以上ある会社は、どの時期でも10社中約4社(6〜9年なら5〜6社)が宣言していた(何もない会社は約2社)。
-# テーマ1つは10社中約3社なので「もっと見る」の扱い
-CAND_THEMES = {
-    "目安": ("配当性向の目安", "配当をすでに「配当性向○%」と数字で約束している会社。減配せずに続けている・配当性向が高くなってきた・大きな会社のどれかに当てはまると、利益に左右されにくい累進配当・DOEに進みやすい"),
-    "中計": ("中期経営計画で還元方針", "配当の方針を中期経営計画の中で決めている会社。計画を作り直すときに新しい方針(累進配当・DOE)を出しやすい"),
-    "自己株": ("自己株買いも方針に", "配当と自己株買いを合わせて株主還元を設計し、減配もしていない会社。配当の約束も文章にしやすい"),
-    "増配": ("増配を目指すと明記", "すでに「増配」を方針にしている。累進配当の宣言とほぼ同じ方向"),
+# 予備軍の組み合わせ。配当政策の書き方(テーマ)とチェックシートの項目を組み合わせ、
+# 3年前・6年前の有報で「その後に累進配当・DOEを宣言したか」を確かめて、どの時期でも強かったものだけを使う。
+# どれか1つに当てはまる会社は6年で10社中約5社、2つ以上なら約6社が宣言していた(ふつうの会社は約2社)
+CAND_RULES = {
+    "1": ("配当性向の目安×中期経営計画×増配", "配当を「配当性向○%」で約束し、中期経営計画の中で配当を伸ばしている会社。次の計画で「下げない」約束に格上げしやすい"),
+    "2": ("配当性向の目安×減配なし×ROEほどほど", "ROEがほどほど(4〜12%)の会社は、利益に連動する配当だとぶれやすいので、配当を安定させる方針(累進配当・DOE)に切り替えやすい。ROEが高い会社は今のままでも配当が増えるので、切り替える必要が薄い"),
+    "3": ("配当性向の目安×配当性向高め×PBR1倍割れ", "配当性向が高くなり、利益連動のままだと減益のときに減配しやすい。PBR1倍割れで東証から株価対策も求められている"),
+    "4": ("中期経営計画×減配なし×利益が安定", "利益が安定していて減配もせず、中期経営計画で還元を語っている会社。計画を作り直すときに新しい方針を出しやすい"),
+    "5": ("自己株買い×PBR1倍割れ×営業CF黒字", "PBR1倍割れで自己株買いなどの株価対策を進めていて、本業でお金も稼げている会社"),
+    "6": ("増配を目指すと明記", "すでに「増配」を方針にしている。累進配当の宣言とほぼ同じ方向"),
     "検討": ("導入を検討中", "累進配当・DOEの導入を検討していると有報に書いている"),
 }
 
@@ -610,30 +620,37 @@ def nocut_years(ds):
 
 
 def candidate(r, ds, po):
-    """予備軍なら (段階, 理由の一覧) を返す。段階 2: テーマ2つ以上か導入を検討中、1: テーマ1つ。
-    理由は [テーマ, 当てはまった中身, なぜ]"""
+    """予備軍なら (段階, 理由の一覧, 減配なし年数) を返す。段階 2: 組み合わせ2つ以上か導入を検討中(強い予備軍)、1: 1つ。
+    理由は [組み合わせ, 当てはまった数字, なぜ]"""
     polc = dict(r.get("polc") or [])
     kw = r.get("kw") or []
-    nc = nocut_years(ds)
+    nc, up = nocut_years(ds), streak_of(ds)
     meyasu = r.get("pot") is not None
-    hipo = po is not None and 40 <= po <= 100
-    big = (r.get("net") or 0) >= 400
+    roe = (r.get("roe") or [None])[-1]
+    eps = [v for v in (r.get("eps") or []) if v is not None]
+    eps_down = sum(1 for i in range(1, len(eps)) if eps[i] < eps[i - 1]) if len(eps) >= 3 else None
+    ocf_neg = sum(1 for v in (r.get("ocf") or []) if v < 0)
+    pbr = None
+    if r.get("per") and eps and eps[-1] > 0 and r.get("bps"):
+        pbr = r["per"] * eps[-1] / r["bps"]
+    pbr_low = pbr is not None and 0.5 <= pbr < 1
+    pot = "配当性向%s%%を目安" % fmt(r.get("pot"))
     k = []
     def add(key, detail):
-        t, why = CAND_THEMES[key]
+        t, why = CAND_RULES[key]
         k.append([t, detail, why])
-    if meyasu and (nc >= 4 or hipo or big):
-        bits = ["配当性向%s%%を目安" % fmt(r["pot"])]
-        if nc >= 4: bits.append("%d年減配なし" % nc)
-        if hipo: bits.append("いまの配当性向%d%%" % round(po))
-        if big: bits.append("純資産%s億円" % format(r["net"], ","))
-        add("目安", "・".join(bits))
-    if "中計" in kw and (big or nc >= 4 or meyasu):
-        add("中計", "配当政策に中期経営計画の記載" + ("・純資産%s億円" % format(r["net"], ",") if big else "・%d年減配なし" % nc if nc >= 4 else ""))
-    if "自己株" in kw and nc >= 4:
-        add("自己株", "配当政策に自己株式の記載・%d年減配なし" % nc)
+    if meyasu and "中計" in kw and up >= 1:
+        add("1", "%s・配当政策に中期経営計画・%d期連続増配" % (pot, up))
+    if meyasu and nc >= 4 and roe is not None and 0.04 <= roe < 0.12:
+        add("2", "%s・%d年減配なし・ROE%.1f%%" % (pot, nc, roe * 100))
+    if meyasu and po is not None and 40 <= po <= 100 and pbr_low:
+        add("3", "%s・いまの配当性向%d%%・PBR%.2f倍" % (pot, round(po), pbr))
+    if "中計" in kw and nc >= 4 and eps_down is not None and eps_down <= 1:
+        add("4", "配当政策に中期経営計画・%d年減配なし・EPSが下がった年%d回(%d期中)" % (nc, eps_down, len(eps)))
+    if "自己株" in kw and pbr_low and r.get("ocf") and ocf_neg == 0:
+        add("5", "配当政策に自己株式・PBR%.2f倍・営業CFは%d期ずっと黒字" % (pbr, len(r["ocf"])))
     if "増配を目指す" in polc:
-        add("増配", polc["増配を目指す"])
+        add("6", polc["増配を目指す"])
     if "導入を検討" in polc:
         add("検討", polc["導入を検討"])
     if not k:
@@ -799,6 +816,9 @@ def cmd_payout(days):
                 r["kw"] = parsed["kw"]
             if parsed.get("net"):
                 r["net"] = round(parsed["net"] / 1e8)
+            r.pop("per", None)
+            if parsed.get("per") and parsed["per"] > 0:
+                r["per"] = round(parsed["per"], 2)
     save_fin(fin)
     return n
 

@@ -299,6 +299,7 @@
   .dots { display: inline-flex; gap: 3px; }
   .dots i { width: 9px; height: 9px; border-radius: 50%; background: var(--line); }
   .dots i.on { background: var(--mid); }
+  .dots i.half { background: linear-gradient(90deg, var(--mid) 50%, var(--line) 50%); }
   .cand-why { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 6px; }
   .cand-why small { font-weight: 700; color: var(--text-2); margin-right: 2px; }
   .cand-why span { color: var(--text); font-weight: 600; }
@@ -497,17 +498,18 @@
   <div class="notes" data-view="find">
     <p><span class="note-label">拾い方</span>有報の配当政策の文章に「累進配当」「減配しない」「維持または増配」「前期実績を下限」などがあれば<b>累進配当</b>、
       「DOE」「株主資本配当率」「純資産配当率」などがあれば<b>DOE</b>としています。「DOEも踏まえて判断」のような軽い書き方も含むので、根拠の文で確かめてください。</p>
-    <p><span class="note-label">予備軍</span>まだ宣言していない会社のうち、<b>過去に宣言した会社と同じ特徴を持つ会社</b>です。
-      3年前・6年前・9年前の有報を全社分読み、その後に累進配当・DOEを宣言した会社に共通していた特徴を4つの「テーマ」にまとめました。
-      テーマが2つ以上ある会社を予備軍として出します(テーマ1つの会社は「テーマ1つの会社も見る」で表示)。</p>
-    <p><span class="note-label">当たり方</span>3年前の有報の時点で、テーマが2つ以上あった会社は<b>10社中約4社</b>が3年以内に宣言しました(6〜9年の長さで見ると5〜6社)。
-      テーマ1つは10社中約3社、テーマのない会社は約2社です。半分以上は宣言しないので、予備軍であることだけを買う理由にはせず、今の配当・財務で判断してください。</p>
-    <p><span class="note-label">テーマ</span>
-      <b>配当性向の目安</b>: 「配当性向○%」を目安にしていて、4年以上減配なし・いまの配当性向40%以上・純資産400億円以上のどれか。配当をすでに数字で約束している会社は、利益に左右されにくい方針に進みやすい。
-      <b>中期経営計画で還元方針</b>: 配当政策に中期経営計画の記載があり、大きな会社か4年以上減配なしか配当性向の目安あり。計画を作り直すときに新しい方針を出しやすい。
-      <b>自己株買いも方針に</b>: 配当政策に自己株式の記載があり、4年以上減配なし。
-      <b>増配を目指すと明記</b>: 「継続的な増配を基本」などの書き方がある。
-      <b>導入を検討中</b>: 累進配当・DOEの導入を検討していると書いている(これだけで予備軍)。</p>
+    <p><span class="note-label">予備軍</span>まだ宣言していない会社のうち、<b>過去に宣言した会社と同じ組み合わせ</b>を持つ会社です。
+      3年前・6年前の有報を全社分読み、配当政策の書き方とチェックシートの項目の組み合わせのうち、その後に累進配当・DOEを宣言した会社に多かったものを6つ選びました。
+      どれか1つに当てはまれば<b>予備軍</b>、2つ以上なら<b>強い予備軍</b>です。</p>
+    <p><span class="note-label">当たり方</span>同じ組み合わせだった会社が6年以内に宣言した割合は、予備軍で10社中約5社、強い予備軍で5〜6社(3年以内ではそれぞれ約4社・約5社)。ふつうの会社は約2社です。
+      半分ほどは宣言しないので、予備軍であることだけを買う理由にはせず、今の配当・財務で判断してください。</p>
+    <p><span class="note-label">組み合わせ</span>
+      <b>①配当性向の目安×中期経営計画×増配</b>: 「配当性向○%」を目安にし、配当政策で中期経営計画に触れ、直近で増配。
+      <b>②配当性向の目安×減配なし×ROEほどほど</b>: 4年以上減配なしで、ROE4〜12%。ROEが高い会社は今のままでも配当が増えるので、方針を変える必要が薄い。
+      <b>③配当性向の目安×配当性向高め×PBR1倍割れ</b>: いまの配当性向40%以上で、PBR0.5〜1倍(PBRは有報のPERから計算)。
+      <b>④中期経営計画×減配なし×利益が安定</b>: 4年以上減配なしで、5期のうちEPSが下がった年が1回以下。
+      <b>⑤自己株買い×PBR1倍割れ×営業CF黒字</b>: 配当政策で自己株式に触れ、PBR0.5〜1倍で、営業CFがずっと黒字。
+      <b>⑥増配を目指すと明記</b>・<b>導入を検討中</b>(これだけで強い予備軍): 有報の配当政策にそう書いている。</p>
     <p><span class="note-label">反映の時期</span>有報は年1回、決算から約3か月後に出ます。決算短信や中期経営計画で新しく宣言した会社は、次の有報が出るまでここに載りません。
       数字は毎週、新しく提出された有報で更新しています(<span id="built"></span>)。</p>
     <p><span class="note-label">株価</span>「株価・予想を見る」で開いたYahoo!ファイナンスの参考指標の欄(色の付いた所)をまとめてコピーして戻ると、株価と予想配当が入ります。株価だけのコピーでもかまいません。入れた値はこの端末に保存し、チェックシートでも使います。</p>
@@ -2088,7 +2090,7 @@
     return "利回り " + (pr.f > 0 ? "予想 <b>" + y.toFixed(2) + "%</b>" + (d > 0 ? " ・ 実績 " + (d / pr.p * 100).toFixed(2) + "%" : "") : "実績 <b>" + y.toFixed(2) + "%</b>") +
       ' <small>(' + pr.d.slice(5).replace("-", "/") + ')</small>';
   }
-  var rows = [], shown = PAGE, pol = "", candAll = false;
+  var rows = [], shown = PAGE, pol = "";
   var $ = function (id) { return document.getElementById(id); };
 
   function esc(t) {
@@ -2115,7 +2117,6 @@
     var out = rows.filter(function (r) {
       // 予備軍(宣言なし)は「予備軍」を選んだときだけ出す
       if (pol === "cand" ? r.p.length : !r.p.length) return false;
-      if (pol === "cand" && !candAll && r.st !== 2) return false;
       if (pol && pol !== "cand" && r.p.indexOf(pol) === -1) return false;
       if (sec && r.s !== sec) return false;
       if (po === "low" && !(r.po != null && r.po < 30)) return false;
@@ -2163,12 +2164,13 @@
     var tags = r.p.map(function (t) { return '<span class="tag ' + (t === "DOE" ? "p-doe" : "p-rui") + '">' + esc(t) + '</span>'; }).join("");
     if (r.k) {
       // 「似た会社10社のうち何社が宣言したか」を点の数で見せる(ふつうの会社は2社)
-      var hit = r.st === 2 ? 4 : 3, dots = "";
-      for (var i = 0; i < 10; i++) dots += '<i class="' + (i < hit ? "on" : "") + '"></i>';
-      tags = '<span class="tag p-cand">累進・DOE予備軍</span>' +
+      // 過去6年で宣言した割合: どれか1つで約5割、2つ以上(強い予備軍)で5〜6割
+      var dots = "";
+      for (var i = 0; i < 10; i++) dots += '<i class="' + (i < 5 ? "on" : i === 5 && r.st === 2 ? "half" : "") + '"></i>';
+      tags = '<span class="tag p-cand">' + (r.st === 2 ? "累進・DOE 強い予備軍" : "累進・DOE予備軍") + '</span>' +
         '<div class="cand-box">' +
           '<div class="cand-odds"><span class="dots" aria-hidden="true">' + dots + '</span>' +
-            '<span>似た会社は<b>10社中' + hit + '社</b>が3年以内に宣言<small>(ふつうは2社)</small></span></div>' +
+            '<span>似た会社は6年で<b>10社中' + (r.st === 2 ? "5〜6社" : "5社") + '</b>が宣言<small>(ふつうは2社)</small></span></div>' +
           '<div class="cand-why"><small>理由</small>' + r.k.map(function (k) { return '<span>' + esc(k[0]) + '</span>'; }).join("") + '</div>' +
         '</div>';
     }
@@ -2199,14 +2201,12 @@
   function render() {
     var list = filtered();
     // 全体の社数は、宣言済みと予備軍を分けて数える
-    var all = rows.filter(function (r) { return pol === "cand" ? !r.p.length && (candAll || r.st === 2) : r.p.length; }).length;
+    var all = rows.filter(function (r) { return pol === "cand" ? !r.p.length : r.p.length; }).length;
     $("count").innerHTML = "<strong>" + list.length.toLocaleString("ja-JP") + "</strong> 社" +
       (pol === "cand" ? "(予備軍)" + (list.length !== all ? "(全" + all + "社中)" : "")
         : "(" + (pol ? pol + "を宣言" : "累進配当・DOEのどちらかを宣言") + (list.length !== all ? "・全" + all + "社中" : "") + ")") +
-      (pol === "cand" ? '<br><small>テーマ2つ以上 ' + rows.filter(function (r) { return r.st === 2; }).length + '社' +
-        ' ・ <button type="button" class="link" id="candMore">' + (candAll ? "テーマ1つの会社を隠す" : "テーマ1つの会社も見る(" + rows.filter(function (r) { return r.st === 1; }).length + "社)") + '</button></small>' : "");
-    var cm = $("candMore");
-    if (cm) cm.onclick = function () { candAll = !candAll; reset(); };
+      (pol === "cand" ? '<br><small>強い予備軍 ' + list.filter(function (r) { return r.st === 2; }).length + '社 ・ 予備軍 ' +
+        list.filter(function (r) { return r.st === 1; }).length + '社</small>' : "");
     var ul = $("list");
     ul.innerHTML = "";
     if (!list.length) { ul.innerHTML = '<li class="empty">条件に合う会社はありません。</li>'; }
@@ -2219,7 +2219,7 @@
   // 検索条件はこの端末に残す(HAITOへ行って戻ってきたときやアプリを開き直したときも続きから)
   var FKEY = "irFindFilters", FIELDS = ["q", "sec", "po", "up", "sort"];
   function saveFilters(last) {
-    var f = { pol: pol, shown: shown, candAll: candAll };
+    var f = { pol: pol, shown: shown };
     FIELDS.forEach(function (id) { f[id] = $(id).value; });
     try {
       var prev = JSON.parse(localStorage.getItem(FKEY) || "{}");
@@ -2239,7 +2239,6 @@
       el.value = f[id];
     });
     pol = f.pol === "both" ? "" : f.pol || "";
-    candAll = !!f.candAll;
     Array.prototype.forEach.call(document.querySelectorAll("#polSeg button"), function (x) { x.classList.toggle("active", x.dataset.v === pol); });
     syncStarSort(false);
     if (pol === "cand" && f.sort === "star") $("sort").value = "star";
