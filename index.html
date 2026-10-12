@@ -293,7 +293,7 @@
   .tag.p-cand { background: var(--mid-soft); color: var(--mid); }
   .tag.p-cand .st-off { opacity: .3; }
   .cand-box { flex-basis: 100%; display: grid; gap: 6px; padding: 8px 10px; border-radius: 10px; background: var(--field); font-size: 12.5px; color: var(--text-2); }
-  .cand-odds { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+  .cand-odds { flex-basis: 100%; font-size: 11.5px; color: var(--text-2); }
   .cand-odds b { color: var(--text); }
   .cand-odds small { margin-left: 2px; }
   .dots { display: inline-flex; gap: 3px; }
@@ -500,8 +500,8 @@
       「DOE」「株主資本配当率」「純資産配当率」などがあれば<b>DOE</b>としています。「DOEも踏まえて判断」のような軽い書き方も含むので、根拠の文で確かめてください。</p>
     <p><span class="note-label">予備軍</span>まだ宣言していない会社のうち、<b>過去に宣言した会社と同じ組み合わせ</b>を持つ会社です。
       3年前・6年前の有報を全社分読み、配当政策の書き方とチェックシートの項目の組み合わせのうち、その後に累進配当・DOEを宣言した会社に多かったものを6つ選びました。
-      どれか1つに当てはまれば<b>予備軍</b>、2つ以上なら<b>強い予備軍</b>です。</p>
-    <p><span class="note-label">当たり方</span>同じ組み合わせだった会社が6年以内に宣言した割合は、予備軍で10社中約5社、強い予備軍で5〜6社(3年以内ではそれぞれ約4社・約5社)。ふつうの会社は約2社です。
+      どれか1つに当てはまれば<b>★</b>、2つ以上なら<b>★★</b>です。</p>
+    <p><span class="note-label">当たり方</span>同じ組み合わせだった会社が6年以内に宣言した割合は、★で10社中約5社、★★で5〜6社(3年以内ではそれぞれ約4社・約5社)。ふつうの会社は約2社です。
       半分ほどは宣言しないので、予備軍であることだけを買う理由にはせず、今の配当・財務で判断してください。</p>
     <p><span class="note-label">組み合わせ</span>
       <b>①配当性向の目安×中期経営計画×増配</b>: 「配当性向○%」を目安にし、配当政策で中期経営計画に触れ、直近で増配。
@@ -509,7 +509,7 @@
       <b>③配当性向の目安×配当性向高め×PBR1倍割れ</b>: いまの配当性向40%以上で、PBR0.5〜1倍(PBRは有報のPERから計算)。
       <b>④中期経営計画×減配なし×利益が安定</b>: 4年以上減配なしで、5期のうちEPSが下がった年が1回以下。
       <b>⑤自己株買い×PBR1倍割れ×営業CF黒字</b>: 配当政策で自己株式に触れ、PBR0.5〜1倍で、営業CFがずっと黒字。
-      <b>⑥増配を目指すと明記</b>・<b>導入を検討中</b>(これだけで強い予備軍): 有報の配当政策にそう書いている。</p>
+      <b>⑥増配を目指すと明記</b>・<b>導入を検討中</b>(これだけで★★): 有報の配当政策にそう書いている。</p>
     <p><span class="note-label">反映の時期</span>有報は年1回、決算から約3か月後に出ます。決算短信や中期経営計画で新しく宣言した会社は、次の有報が出るまでここに載りません。
       数字は毎週、新しく提出された有報で更新しています(<span id="built"></span>)。</p>
     <p><span class="note-label">株価</span>「株価・予想を見る」で開いたYahoo!ファイナンスの参考指標の欄(色の付いた所)をまとめてコピーして戻ると、株価と予想配当が入ります。株価だけのコピーでもかまいません。入れた値はこの端末に保存し、チェックシートでも使います。</p>
@@ -2164,15 +2164,11 @@
     var tags = r.p.map(function (t) { return '<span class="tag ' + (t === "DOE" ? "p-doe" : "p-rui") + '">' + esc(t) + '</span>'; }).join("");
     if (r.k) {
       // 「似た会社10社のうち何社が宣言したか」を点の数で見せる(ふつうの会社は2社)
-      // 過去6年で宣言した割合: どれか1つで約5割、2つ以上(強い予備軍)で5〜6割
-      var dots = "";
-      for (var i = 0; i < 10; i++) dots += '<i class="' + (i < 5 ? "on" : i === 5 && r.st === 2 ? "half" : "") + '"></i>';
-      tags = '<span class="tag p-cand">' + (r.st === 2 ? "累進・DOE 強い予備軍" : "累進・DOE予備軍") + '</span>' +
-        '<div class="cand-box">' +
-          '<div class="cand-odds"><span class="dots" aria-hidden="true">' + dots + '</span>' +
-            '<span>似た会社は6年で<b>10社中' + (r.st === 2 ? "5〜6社" : "5社") + '</b>が宣言<small>(ふつうは2社)</small></span></div>' +
-          '<div class="cand-why"><small>理由</small>' + r.k.map(function (k) { return '<span>' + esc(k[0]) + '</span>'; }).join("") + '</div>' +
-        '</div>';
+      // ★2つ: 組み合わせ2つ以上(過去6年で10社中5〜6社が宣言)・★1つ: 1つ(約5社)。ふつうの会社は約2社
+      var st = r.st === 2 ? 2 : 1;
+      tags = '<span class="tag p-cand">予備軍 ' + "★★".slice(0, st) + '<span class="st-off">' + "★★".slice(st) + '</span></span>' +
+        r.k.map(function (k) { return '<span class="tag p-why">' + esc(k[0]) + '</span>'; }).join("") +
+        '<span class="cand-odds">過去、この★の会社は6年で10社中' + (st === 2 ? "5〜6社" : "約5社") + 'が宣言(ふつうは約2社)</span>';
     }
     if (r.po != null && r.po < 30) tags += '<span class="tag room">配当性向30%未満・増配余力</span>';
     li.innerHTML =
@@ -2205,7 +2201,7 @@
     $("count").innerHTML = "<strong>" + list.length.toLocaleString("ja-JP") + "</strong> 社" +
       (pol === "cand" ? "(予備軍)" + (list.length !== all ? "(全" + all + "社中)" : "")
         : "(" + (pol ? pol + "を宣言" : "累進配当・DOEのどちらかを宣言") + (list.length !== all ? "・全" + all + "社中" : "") + ")") +
-      (pol === "cand" ? '<br><small>強い予備軍 ' + list.filter(function (r) { return r.st === 2; }).length + '社 ・ 予備軍 ' +
+      (pol === "cand" ? '<br><small>★★ ' + list.filter(function (r) { return r.st === 2; }).length + '社 ・ ★ ' +
         list.filter(function (r) { return r.st === 1; }).length + '社</small>' : "");
     var ul = $("list");
     ul.innerHTML = "";
@@ -2262,7 +2258,7 @@
     var sel = $("sort"), opt = sel.querySelector('option[value="star"]');
     if (pol === "cand") {
       if (!opt) {
-        opt = document.createElement("option"); opt.value = "star"; opt.textContent = "テーマが多い順";
+        opt = document.createElement("option"); opt.value = "star"; opt.textContent = "★が多い順";
         sel.insertBefore(opt, sel.firstChild);
       }
       if (entering) sel.value = "star";
