@@ -348,6 +348,14 @@
   .bars .bar.is-fc.is-down { border-color: var(--bad); }
   .eps-over .dot.is-fc { opacity: .5; }
   .trend .key i.fc { background: var(--chart); opacity: .5; }
+  .perk-line { font-size: 12.5px; color: var(--text-2); margin: 8px 0 0; line-height: 1.7; }
+  .perk-line b { color: var(--text); margin-right: 4px; }
+  .perk-line .pk-yes { color: var(--ok); font-weight: 700; }
+  .perk-line .pk-no { font-weight: 700; }
+  .perk-line .pk-unk { color: var(--muted); }
+  .perk-line details { margin-top: 2px; }
+  .perk-line summary { cursor: pointer; font-size: 12px; }
+  .perk-line details p { font-size: 12px; margin: 4px 0 0; max-height: 10em; overflow-y: auto; }
   .bars .cap.sel { left: 50%; transform: translateX(-50%); z-index: 2; background: var(--card); border-radius: 4px; padding: 0 3px; box-shadow: 0 0 0 1px var(--line); }
   .bars .cap.sel.at-l { left: 0; transform: none; }
   .bars .cap.sel.at-r { left: auto; right: 0; transform: none; }
@@ -543,6 +551,7 @@
       <button type="button" class="btn-link" id="pasteBtn">📋 貼り付け</button>
       <span class="yield-line" id="yieldLine"></span>
     </div>
+    <div class="perk-line" id="perkLine" hidden></div>
     <div class="auto-status" id="autoStatus" hidden>
       <span id="autoStatusText"></span>
       <button type="button" class="btn-link" id="rescoreBtn">有報の値で採点し直す</button>
@@ -1680,6 +1689,7 @@
       lines.push("| " + name + " | " + (labelOf(r.item, r.value) || "—") + " | " + MARK[r.level] + (r.note ? "(" + r.note + ")" : "") + " | " + (why || "—") + " |");
     });
     lines.push("");
+    if (state.subject.perk) lines.push("- 株主優待: " + state.subject.perk);
     lines.push("- 判定: ◎" + s.counts.good + " ○" + s.counts.ok + " △" + s.counts.mid + " ❌" + s.counts.bad);
     lines.push("- 重要4項目(★): " + s.starPassing + " / " + s.starTotal + " が◎○");
     if (s.badItems.length > 0) {
@@ -1843,9 +1853,36 @@
     return "https://finance.yahoo.co.jp/quote/" + encodeURIComponent(code) + ".T#:~:text=" + encodeURIComponent("参考指標") + "," + encodeURIComponent("単元株数");
   }
   window.irYahooUrl = yahooUrl;
+  // 株主優待の有無。HAITO(同じサイト)が有報の「株主に対する特典」から作った表を読む
+  // flags: 0=なし、1=あり(金額は出せない)、[[株数, 年間の円], ...]=段階。text: 特典の文(ありの会社だけ)
+  var perkFlags = null, perkTexts = {};
+  function perkData(code) {
+    if (!perkFlags) perkFlags = fetch("../haito-dashboard/perks/flags.json").then(function (r) { return r.ok ? r.json() : {}; }).catch(function () { return {}; });
+    var head = code.charAt(0);
+    if (!perkTexts[head]) perkTexts[head] = fetch("../haito-dashboard/perks/" + head + ".json").then(function (r) { return r.ok ? r.json() : {}; }).catch(function () { return {}; });
+    return Promise.all([perkFlags, perkTexts[head]]).then(function (x) { return { flag: x[0][code], text: x[1][code] || "" }; });
+  }
+  function renderPerk(code) {
+    var box = document.getElementById("perkLine");
+    if (!/^[0-9][0-9A-Z]{3}$/.test(code)) { box.hidden = true; return; }
+    perkData(code).then(function (d) {
+      if (curCode() !== code) return;
+      var f = d.flag, html;
+      if (f === undefined) html = '<b>株主優待</b> <span class="pk-unk">データなし</span>(有報で確認できませんでした)';
+      else if (!f) html = '<b>株主優待</b> <span class="pk-no">なし</span>';
+      else {
+        var tiers = Array.isArray(f) ? f.map(function (t) { return t[0].toLocaleString("ja-JP") + "株で年" + t[1].toLocaleString("ja-JP") + "円相当"; }).join("・") : "";
+        html = '<b>株主優待</b> <span class="pk-yes">あり</span>' + (tiers ? "(" + tiers + ")" : "") +
+          (d.text ? '<details><summary>内容(有報の「株主に対する特典」)</summary><p>' + escapeHtml(d.text) + '</p></details>' : "");
+      }
+      box.innerHTML = html; box.hidden = false;
+      state.subject.perk = !f ? (f === undefined ? "" : "なし") : "あり";
+    });
+  }
   function renderPriceTools() {
     var code = curCode(), ok = /^[0-9][0-9A-Z]{3}$/.test(code);
     document.getElementById("priceTools").hidden = !ok;
+    renderPerk(code);
     if (!ok) return;
     document.getElementById("priceLink").href = yahooUrl(code);
     var line = document.getElementById("yieldLine");
