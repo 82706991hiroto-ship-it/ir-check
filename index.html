@@ -1025,6 +1025,11 @@
     });
     ev.roe = rec.roe ? { value: (lastOf(rec.roe) * 100).toFixed(1), reason: "当期", series: rec.roe } : null;
     ev.pbr = rec.bps ? { value: null, reason: "1株純資産 " + rec.bps.toLocaleString("ja-JP") + "円。株価を入れるとPBRが出ます", bps: rec.bps } : null;
+    // 当期に連結をやめた会社は、前期までの連結と当期の単体をつないでいる(有報の欄がそうなっているため)
+    var SW_KEY = { sales: "sales", eps: "eps", cf: "ocf", cash: "cash", equity: "eq", roe: "roe" };
+    Object.keys(SW_KEY).forEach(function (k) {
+      if (ev[k] && ev[k].reason && (rec.sw || []).indexOf(SW_KEY[k]) !== -1) ev[k].reason += "(前期までは連結、当期は単体の数字です)";
+    });
     Object.keys(ev).forEach(function (k) { if (ev[k] && ev[k].value === undefined) ev[k].value = null; });
     return ev;
   }

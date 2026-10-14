@@ -154,6 +154,10 @@ def num(s):
         return None
 
 
+class SplicedList(list):
+    """前期までの連結と当期の単体をつないだ系列の目印。"""
+
+
 def parse_csv(text):
     """有報のXBRL(CSV)から、5期分の系列と当期の営業利益を取り出す。"""
     facts = {}
@@ -208,7 +212,12 @@ def parse_csv(text):
             if pick[-1] is None:
                 other = solo if pick is cons else cons
                 if other[-1] is not None:
-                    pick = other
+                    # 当期に連結をやめた会社(例: 前澤給装工業)は、前期までが連結、当期が単体にしか無い。
+                    # 単体は当期1期だけなので、前期までの連結とつないで推移を残す(つないだことは sw に書く)
+                    if pick is cons and filled(other) == 1 and filled(pick) >= 1:
+                        pick = SplicedList(pick[:-1] + [other[-1]])
+                    else:
+                        pick = other
             # IFRSなどへの移行の前後は、参考の2期分だけ別の基準が載ることがある(例: 東京海上)。
             # 当期の値があり、より多くの期が載っている基準を正式なものとして使う
             # 連結(1株配当などは個別)の当期の値を、別の側(例: 持株会社の単体)の当期より優先する(例: リガクHD)
@@ -216,6 +225,8 @@ def parse_csv(text):
             if filled(pick) and (best is None or rank > best_rank):
                 best, best_rank = pick, rank
         out[field] = best
+        if isinstance(best, SplicedList):
+            out.setdefault("sw", []).append(field)
     # 1株純資産は連結を優先する。IFRSの会社には、連結の1株純資産を「自己資本比率」の項目名で載せているところがある
     # (例: 伊藤忠商事。値が5を超えるので比率ではないと分かる)。連結が見つからなければ、単体は使わず入れない
     cons_bps = None
@@ -362,6 +373,9 @@ def record(parsed, name, sector):
         # 比率の欄に別の数字を入れている会社がある(自己資本比率に1株純資産など)
         if s and all(-5 < v < 5 for v in s):
             rec[field] = [round(v, 4) for v in s]
+    sw = [f for f in (parsed.get("sw") or []) if f in rec or f in ("eq", "roe")]
+    if sw:
+        rec["sw"] = sw
     d, sh = parsed.get("div"), parsed.get("shares") or [None] * 5
     it = parsed.get("interim") or [None] * 5
     if d and d[-1] is None and any(v is not None for v in d[:-1]):
@@ -782,7 +796,10 @@ def cmd_refetch(days, codes=None):
                 continue
             old = fin[code[0]][code]
             new = record(parsed, old.get("n"), old.get("sec", ""))
-            # 割り戻し・長期の系列などは、このあとの longdiv で付け直す
+            # 長期の配当・記念配当・PERなど、別の手順で足した値は残す(longdiv で付け直す前提でも、消えたままにしない)
+            for k in ("dl", "dlo", "sp", "per", "pot", "polc", "kw", "q"):
+                if k in old and k not in new:
+                    new[k] = old[k]
             fin[code[0]][code] = new
             n += 1
     save_fin(fin)
