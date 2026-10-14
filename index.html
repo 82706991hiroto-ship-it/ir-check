@@ -1738,6 +1738,7 @@
         state.values = Object.assign({}, values);
         if (!state.subject.name || state.subject.name === prevName) state.subject.name = rec.n;
       }
+      applyForecastToDividend();
       save(); renderSubject(); renderItems(); renderTally();
       var n = Object.keys(values).length;
       var chk = dataChecks()[code];
@@ -1950,6 +1951,36 @@
     save();
   });
 
+  // 会社予想の1株配当(Yahoo!などから入れた値)を、「1株配当」の判定に反映する。
+  // 有報は過去の実績だけなので、今期に減配予想が出ていても「連続増配」のままになっていた。
+  // 前期の実績より低い予想なら、予想を最後の1期として判定し直す(増配・据え置きの予想は、会社予想は慎重に出されがちなので判定は変えず、根拠に書くだけ)。
+  function applyForecastToDividend() {
+    var a = state.auto;
+    if (!a || !a.ev || !a.ev.dividend || !a.ev.dividend.series || a.code !== (state.subject.code || "").trim().toUpperCase()) return false;
+    if (!a.divBase) a.divBase = { value: a.ev.dividend.value, reason: a.ev.dividend.reason, big: a.ev.dividend.big };
+    var base = a.divBase, series = a.ev.dividend.series, last = lastOf(series);
+    var fd = parseFloat(state.subject.fdiv);
+    var before = a.ev.dividend.value, note = "", res = null;
+    if (fd > 0 && last > 0) {
+      if (fd < last - 0.005) {
+        res = dividendOf(series.concat([fd]));
+        if (res) note = "。会社予想" + fd + "円は前期実績" + last + "円より低い(減配予想)ため、予想を最後の1期として判定しました";
+      } else {
+        note = "。会社予想は" + fd + "円(前期実績" + last + "円から" + (fd > last + 0.005 ? "増配" : "据え置き") + "予想)";
+      }
+    }
+    a.ev.dividend.value = res ? res.value : base.value;
+    a.ev.dividend.big = res ? res.big : base.big;
+    a.ev.dividend.reason = (res ? res.reason : base.reason) + note;
+    // 手で変えていなければ、入力欄の値も合わせる(手で変えた値は触らない)
+    var cur = state.values.dividend;
+    if (cur === undefined || String(cur) === String(a.values.dividend)) {
+      state.values.dividend = a.ev.dividend.value;
+    }
+    a.values.dividend = a.ev.dividend.value;
+    return a.ev.dividend.value !== before;
+  }
+
   function renderSubject() {
     document.getElementById("subjCode").value = state.subject.code || "";
     document.getElementById("subjName").value = state.subject.name || "";
@@ -1966,7 +1997,11 @@
     var raw = parsePrice(e.target.value);
     state.subject.fdiv = raw;
     storePrice(curCode(), undefined, parseFloat(raw) || 0);
-    renderPriceTools(); save();
+    renderPriceTools();
+    var changed = applyForecastToDividend();
+    save();
+    if (changed || (state.auto && state.auto.ev && state.auto.ev.dividend)) { renderItems(); renderTally(); }
+    if (changed) setStatus("会社予想の配当を反映して、「1株あたり配当金」の判定を「" + labelOf(ITEMS.filter(function (i) { return i.key === "dividend"; })[0], state.values.dividend) + "」に変えました。");
   });
 
   ["subjCode", "subjName"].forEach(function (id) {
