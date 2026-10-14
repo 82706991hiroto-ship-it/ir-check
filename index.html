@@ -526,6 +526,7 @@
       <label>銘柄名<input type="text" id="subjName" placeholder="三菱UFJ"></label>
       <label>株価(任意)<input type="text" id="subjPrice" inputmode="decimal" autocomplete="off" placeholder="PBR・利回りに使います"></label>
       <label>予想配当(任意)<input type="text" id="subjFDiv" inputmode="decimal" autocomplete="off" placeholder="会社予想の1株配当(円)"></label>
+      <label>目標利回り(%・任意)<input type="text" id="subjTarget" inputmode="decimal" autocomplete="off" placeholder="この銘柄を買いたい利回り 例: 4.5"></label>
     </div>
     <div class="price-tools" id="priceTools" hidden>
       <a id="priceLink" target="_blank" rel="noopener noreferrer">株価・予想を見る(Yahoo!) ↗</a>
@@ -1551,7 +1552,7 @@
       var loadBtn = document.createElement("button");
       loadBtn.textContent = "読み込む";
       loadBtn.addEventListener("click", function () {
-        state.subject = { code: entry.code, name: entry.name };
+        state.subject = { code: entry.code, name: entry.name, target: entry.target || "" };
         state.values = Object.assign({}, entry.values);
         state.auto = null;
         save(); renderSubject(); renderItems(); renderTally();
@@ -1594,6 +1595,7 @@
       date: date,
       code: state.subject.code,
       name: state.subject.name,
+      target: state.subject.target || "",
       values: Object.assign({}, state.values),
       counts: s.counts,
       starPassing: s.starPassing,
@@ -1618,6 +1620,9 @@
     if (price > 0) url += "&price=" + encodeURIComponent(price);
     var fdiv = parseFloat(state.subject.fdiv);
     if (fdiv > 0) url += "&fdiv=" + encodeURIComponent(fdiv);
+    // 目標利回りはこの銘柄を保存するときの値を渡す(入れていなければ向こうの既定のまま)
+    var target = parseFloat(state.subject.target);
+    if (target > 0) url += "&target=" + encodeURIComponent(target);
     location.href = url;
   });
 
@@ -1903,7 +1908,10 @@
       state.subject.price = known && known.p ? String(known.p) : "";
       state.subject.fdiv = known && known.f ? String(known.f) : "";
       state.subject.feps = known && known.e != null ? String(known.e) : "";
+      var lastSaved = state.saved.filter(function (x) { return (x.code || "").trim().toUpperCase() === code; }).pop();
+      state.subject.target = lastSaved && lastSaved.target ? lastSaved.target : "";
       document.getElementById("subjFDiv").value = state.subject.fdiv;
+      document.getElementById("subjTarget").value = state.subject.target;
       setAutoStatus("有価証券報告書のデータを読み込んでいます…", false);
       applyAuto(code, true);
     }, 300);
@@ -1947,8 +1955,13 @@
     document.getElementById("subjName").value = state.subject.name || "";
     document.getElementById("subjPrice").value = state.subject.price || "";
     document.getElementById("subjFDiv").value = state.subject.fdiv || "";
+    document.getElementById("subjTarget").value = state.subject.target || "";
     renderPriceTools();
   }
+  document.getElementById("subjTarget").addEventListener("input", function (e) {
+    state.subject.target = parsePrice(e.target.value);
+    save();
+  });
   document.getElementById("subjFDiv").addEventListener("input", function (e) {
     var raw = parsePrice(e.target.value);
     state.subject.fdiv = raw;
@@ -1976,13 +1989,13 @@
     else storePrice(code, price);
     var last = state.saved.filter(function (x) { return (x.code || "").trim().toUpperCase() === code; }).pop();
     if (last) {
-      state.subject = { code: code, name: last.name || "", price: price > 0 ? String(price) : "", fdiv: fdiv, feps: feps };
+      state.subject = { code: code, name: last.name || "", price: price > 0 ? String(price) : "", fdiv: fdiv, feps: feps, target: last.target || "" };
       state.values = Object.assign({}, last.values);
       state.auto = null;
       save();
       fromLink = { code: code, overwrite: false, msg: last.date + " に保存した評価を開きました。" };
     } else if ((state.subject.code || "").trim().toUpperCase() !== code) {
-      state.subject = { code: code, name: "", price: price > 0 ? String(price) : "", fdiv: fdiv, feps: feps };
+      state.subject = { code: code, name: "", price: price > 0 ? String(price) : "", fdiv: fdiv, feps: feps, target: "" };
       state.values = {};
       state.auto = null;
       save();
