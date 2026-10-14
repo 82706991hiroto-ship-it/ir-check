@@ -797,7 +797,7 @@ def cmd_refetch(days, codes=None):
             old = fin[code[0]][code]
             new = record(parsed, old.get("n"), old.get("sec", ""))
             # 長期の配当・記念配当・PERなど、別の手順で足した値は残す(longdiv で付け直す前提でも、消えたままにしない)
-            for k in ("dl", "dlo", "sp", "per", "pot", "polc", "kw", "q"):
+            for k in ("dl", "dlo", "sp", "splits", "per", "pot", "polc", "kw", "q"):
                 if k in old and k not in new:
                     new[k] = old[k]
             fin[code[0]][code] = new
