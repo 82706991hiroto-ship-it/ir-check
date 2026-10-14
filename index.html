@@ -348,6 +348,10 @@
   .bars .bar.is-fc.is-down { border-color: var(--bad); }
   .eps-over .dot.is-fc { opacity: .5; }
   .trend .key i.fc { background: var(--chart); opacity: .5; }
+  .bars .cap.sel { left: 50%; transform: translateX(-50%); z-index: 2; background: var(--card); border-radius: 4px; padding: 0 3px; box-shadow: 0 0 0 1px var(--line); }
+  .bars .cap.sel.at-l { left: 0; transform: none; }
+  .bars .cap.sel.at-r { left: auto; right: 0; transform: none; }
+  .bars .cap.sel small { font-weight: 400; color: var(--text-2); margin-left: 3px; }
   .bars .cap { position: absolute; top: -2px; font-size: 10.5px; font-weight: 700; color: var(--text); white-space: nowrap; font-variant-numeric: tabular-nums; }
   .bars .col.is-on .bar { outline: 2px solid var(--text); outline-offset: 1px; }
   .bars-x { display: flex; gap: 2px; margin-top: 4px; }
@@ -531,6 +535,7 @@
       <label>銘柄名<input type="text" id="subjName" placeholder="三菱UFJ"></label>
       <label>株価(任意)<input type="text" id="subjPrice" inputmode="decimal" autocomplete="off" placeholder="PBR・利回りに使います"></label>
       <label>予想配当(任意)<input type="text" id="subjFDiv" inputmode="decimal" autocomplete="off" placeholder="会社予想の1株配当(円)"></label>
+      <label>予想のうち記念配当(任意)<input type="text" id="subjFSp" inputmode="decimal" autocomplete="off" placeholder="予想配当に含まれる記念・特別配当(円)"></label>
       <label>目標利回り(%・任意)<input type="text" id="subjTarget" inputmode="decimal" autocomplete="off" placeholder="この銘柄を買いたい利回り 例: 4.5"></label>
     </div>
     <div class="price-tools" id="priceTools" hidden>
@@ -1371,9 +1376,16 @@
     var line = wrap.querySelector(".readout-line");
     function show(i) {
       Array.prototype.forEach.call(wrap.querySelectorAll(".col"), function (c) { c.classList.toggle("is-on", +c.dataset.i === i); });
-      var prev = i > 0 ? vals[i - 1] : null, v = vals[i];
+      var prev = i > 0 ? vals[i - 1] : null, v = vals[i], ex = opts.extra && opts.extra[i] > 0 ? opts.extra[i] : 0;
       line.textContent = labels[i] + (opts.fc && i === vals.length - 1 ? "期(会社予想) " : "期 ") + fmtNum(v, opts.unit) +
+        (ex ? "(記念・特別配当" + fmtNum(ex, opts.unit) + "を除く・合計" + fmtNum(v + ex, opts.unit) + ")" : "") +
         (prev != null && prev > 0 && v > 0 ? "(前の期から " + (v >= prev ? "+" : "") + ((v / prev - 1) * 100).toFixed(1) + "%)" : "");
+      // 選んだ棒の上に値を出す(最後の棒は常に出ている)
+      Array.prototype.forEach.call(wrap.querySelectorAll(".cap.sel"), function (c) { c.remove(); });
+      if (i !== vals.length - 1) {
+        var col = wrap.querySelector('.col[data-i="' + i + '"]'), top = vals[i] > 0 ? Math.max(2, vals[i] / niceTop(Math.max.apply(null, vals.map(function (x) { return x > 0 ? x : 0; }).concat([0]))) * 100) : 2;
+        if (col) col.insertAdjacentHTML("afterbegin", '<span class="cap sel' + (i < 2 ? " at-l" : i > vals.length - 4 ? " at-r" : "") + '" style="bottom:calc(' + top + '% + 3px);top:auto">' + fmtNum(v, opts.unit) + (ex ? "<small>+記念" + fmtNum(ex, opts.unit) + "</small>" : "") + "</span>");
+      }
     }
     wrap.querySelector(".bars").addEventListener("click", function (e) { var c = e.target.closest(".col"); if (c) show(+c.dataset.i); });
     wrap.querySelector(".bars").addEventListener("mouseover", function (e) { var c = e.target.closest(".col"); if (c) show(+c.dataset.i); });
@@ -1437,11 +1449,15 @@
     box.classList.toggle("anim", renderTrends.last !== code);
     renderTrends.last = code;
     // 入れてある会社予想(Yahoo!などから)は、次の期として薄い棒で足す
-    var fd = parseFloat(state.subject.fdiv), fe = parseFloat(state.subject.feps);
+    var fdTotal = parseFloat(state.subject.fdiv), fsp = parseFloat(state.subject.fsp) || 0, fe = parseFloat(state.subject.feps);
+    var fd = fdTotal > 0 && fsp > 0 && fsp < fdTotal ? fdTotal - fsp : fdTotal;   // 棒は普通配当(記念・特別を除く)
     var hasFd = fd > 0, labelsD = fyLabels(rec.fy, dps.length);
+    // 記念・特別配当(有報の注記)を、期ごとに持っておく。棒を押したとき「合計」を出すため
+    var extra = dps.map(function (v, j) { var key = shiftFy(rec.fy, j - (dps.length - 1)).slice(0, 7); return rec.sp && rec.sp[key] > 0 ? rec.sp[key] : 0; });
+    if (hasFd) extra.push(fsp > 0 && fsp < fdTotal ? fsp : 0);
     if (hasFd) labelsD = fyLabels(shiftFy(rec.fy, 1), dps.length + 1);
     box.appendChild(barChart("1株配当", "期ごとの年間配当(円)。赤は前の期より減った期" + (rec.sp ? "。記念・特別配当は除いています(" + specialText(rec.sp) + ")" : ""),
-      labelsD, hasFd ? dps.concat([fd]) : dps, { unit: "円", downMark: true, fc: hasFd }));
+      labelsD, hasFd ? dps.concat([fd]) : dps, { unit: "円", downMark: true, fc: hasFd, extra: extra }));
     var eps = rec.eps, div = rec.div;
     // 1株配当と1株利益で期の数が違う会社(分割の年を外した等)は、新しい期の方からそろえる
     var k = eps && div ? Math.min(eps.length, div.length) : 0;
@@ -1786,11 +1802,12 @@
     var fdiv = after(/1株配当\s*\(会社予想\)[^0-9-]{0,40}?([0-9][0-9,]*(?:\.[0-9]+)?)/);
     var yld = after(/配当利回り\s*\(会社予想\)[^0-9-]{0,40}?([0-9][0-9,]*(?:\.[0-9]+)?)\s*%/);
     var feps = after(/EPS\s*\(会社予想\)[^0-9-]{0,40}?(-?[0-9][0-9,]*(?:\.[0-9]+)?)/);
+    var fsp = after(/(?:記念|特別)配当[^0-9]{0,12}?([0-9][0-9,]*(?:\.[0-9]+)?)\s*円/);
     var minBuy = after(/最低購入代金[^0-9]*?([0-9][0-9,]*)/), unit = after(/単元株数[^0-9]*?([0-9][0-9,]*)/);
     var exact = minBuy > 0 && unit > 0;
     var price = exact ? minBuy / unit : fdiv > 0 && yld > 0 ? fdiv / (yld / 100) : NaN;
     if (!(fdiv > 0) && !(price > 0) && isNaN(feps)) return null;
-    return { price: price > 0 ? Math.round(price * 10) / 10 : NaN, approx: !exact, fdiv: fdiv, feps: feps };
+    return { price: price > 0 ? Math.round(price * 10) / 10 : NaN, approx: !exact, fdiv: fdiv, feps: feps, fsp: fsp };
   }
   window.irParseQuoteBlock = parseQuoteBlock;  // 探すタブの一覧からも使う
   function loadPrices() { try { return JSON.parse(localStorage.getItem(PRICE_KEY) || "{}"); } catch (e) { return {}; } }
@@ -1862,6 +1879,10 @@
       var f = document.getElementById("subjFDiv"); f.value = String(b.fdiv); f.dispatchEvent(new Event("input"));
       parts.push("予想配当 " + b.fdiv + "円");
     }
+    if (b.fsp > 0) {
+      var sp = document.getElementById("subjFSp"); sp.value = String(b.fsp); sp.dispatchEvent(new Event("input"));
+      parts.push("うち記念・特別配当 " + b.fsp + "円");
+    }
     if (!isNaN(b.feps)) {
       state.subject.feps = String(b.feps);
       storePrice(curCode(), undefined, undefined, b.feps);
@@ -1931,6 +1952,7 @@
       state.subject.target = lastSaved && lastSaved.target ? lastSaved.target : "";
       document.getElementById("subjFDiv").value = state.subject.fdiv;
       document.getElementById("subjTarget").value = state.subject.target;
+      state.subject.fsp = ""; document.getElementById("subjFSp").value = "";
       setAutoStatus("有価証券報告書のデータを読み込んでいます…", false);
       applyAuto(code, true);
     }, 300);
@@ -1977,14 +1999,15 @@
     if (!a || !a.ev || !a.ev.dividend || !a.ev.dividend.series || a.code !== (state.subject.code || "").trim().toUpperCase()) return false;
     if (!a.divBase) a.divBase = { value: a.ev.dividend.value, reason: a.ev.dividend.reason, big: a.ev.dividend.big };
     var base = a.divBase, series = a.ev.dividend.series, last = lastOf(series);
-    var fd = parseFloat(state.subject.fdiv);
+    var fdTotal = parseFloat(state.subject.fdiv), fsp = parseFloat(state.subject.fsp) || 0;
+    var fd = fdTotal > 0 ? (fsp > 0 && fsp < fdTotal ? fdTotal - fsp : fdTotal) : fdTotal;   // 記念・特別配当を除いた普通配当
     var before = a.ev.dividend.value, note = "", res = null;
     if (fd > 0 && last > 0) {
       if (fd < last - 0.005) {
         res = dividendOf(series.concat([fd]));
-        if (res) note = "。会社予想" + fd + "円は前期実績" + last + "円より低い(減配予想)ため、予想を最後の1期として判定しました";
+        if (res) note = "。会社予想" + fd + "円" + (fsp > 0 ? "(記念・特別配当" + fsp + "円を除く)" : "") + "は前期実績" + last + "円より低い(減配予想)ため、予想を最後の1期として判定しました";
       } else {
-        note = "。会社予想は" + fd + "円(前期実績" + last + "円から" + (fd > last + 0.005 ? "増配" : "据え置き") + "予想)";
+        note = "。会社予想は" + fd + "円" + (fsp > 0 ? "(記念・特別配当" + fsp + "円を除く)" : "") + "(前期実績" + last + "円から" + (fd > last + 0.005 ? "増配" : "据え置き") + "予想)";
       }
     }
     a.ev.dividend.value = res ? res.value : base.value;
@@ -2005,8 +2028,16 @@
     document.getElementById("subjPrice").value = state.subject.price || "";
     document.getElementById("subjFDiv").value = state.subject.fdiv || "";
     document.getElementById("subjTarget").value = state.subject.target || "";
+    document.getElementById("subjFSp").value = state.subject.fsp || "";
     renderPriceTools();
   }
+  // Yahoo!の参考指標には会社予想の1株配当の合計しか載らないので、記念・特別配当が含まれるときは会社発表(決算短信など)を見て手で入れる。
+  // 入れると、予想の判定と棒は普通配当(合計 − 記念)で見る
+  document.getElementById("subjFSp").addEventListener("input", function (e) {
+    state.subject.fsp = parsePrice(e.target.value);
+    var changed = applyForecastToDividend();
+    save(); renderTrends(); renderItems(); renderTally();
+  });
   document.getElementById("subjTarget").addEventListener("input", function (e) {
     state.subject.target = parsePrice(e.target.value);
     save();
