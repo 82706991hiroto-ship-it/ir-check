@@ -1930,6 +1930,8 @@
     var pp = kp && kp.p > 0 ? kp.p : parseFloat(state.subject.price) || 0;
     if (code && !state.splitProbes[code] && pp > 0) state.splitProbes[code] = { pp: pp, pd: kp && kp.d ? kp.d : "" };
     if (b.price > 0) { setPrice(String(b.price)); parts.push("株価 " + b.price.toLocaleString("ja-JP") + "円" + (b.approx ? "(配当と利回りからの概算)" : "")); }
+    // 予想EPSは予想配当より先に入れておく(予想配当を入れたときの株式分割の見分けに使う)
+    if (!isNaN(b.feps)) state.subject.feps = String(b.feps);
     if (b.fdiv > 0) {
       var f = document.getElementById("subjFDiv"); f.value = String(b.fdiv); f.dispatchEvent(new Event("input"));
       parts.push("予想配当 " + b.fdiv + "円");
@@ -2061,9 +2063,9 @@
     if (fd > 0 && last > 0) {
       var g = fd < last - 0.005 ? splitGuess(last, fd) : null;
       curSplit = g;
-      if (g && g.by === "price") {
-        // 株価も同じ割合で下がっている: 株式分割とみて、減配の判定はしない
-        note = "。会社予想" + fd + "円は前期実績" + last + "円の約" + g.n + "分の1ですが、株価も同じ割合で下がっているため、1株→" + g.n + "株の株式分割とみて減配の判定はしていません";
+      if (g && g.by !== "div") {
+        // 株価(または1株利益)も同じ割合で下がっている: 株式分割とみて、減配の判定はしない
+        note = "。会社予想" + fd + "円は前期実績" + last + "円の約" + g.n + "分の1ですが、" + (g.by === "price" ? "株価" : "予想1株利益") + "も同じ割合で下がっているため、1株→" + g.n + "株の株式分割とみて減配の判定はしていません";
       } else if (fd < last - 0.005) {
         res = dividendOf(series.concat([fd]));
         if (res) note = "。会社予想" + fd + "円" + (fsp > 0 ? "(記念・特別配当" + fsp + "円を除く)" : "") + "は前期実績" + last + "円より低い(減配予想)ため、予想を最後の1期として判定しました" +
@@ -2090,7 +2092,9 @@
   function splitGuess(last, fd) {
     if (!window.HaitoSplits) return null;
     var pr = (state.splitProbes || {})[curCode()] || {};
-    var g = window.HaitoSplits.guess({ last: last, fdiv: fd, price: parseFloat(state.subject.price), prevPrice: pr.pp, prevDate: pr.pd });
+    var rec = state.auto && state.auto.rec, le = rec && rec.eps && !rec.localSplit ? rec.eps[rec.eps.length - 1] : null;
+    var g = window.HaitoSplits.guess({ last: last, fdiv: fd, price: parseFloat(state.subject.price), prevPrice: pr.pp, prevDate: pr.pd,
+                                       feps: parseFloat(state.subject.feps), lastEps: le });
     // 株価がほぼそのまま(本当の減配)なら、次に貼るときは新しい株価から比べる
     if (!g && pr.pp && state.splitProbes) delete state.splitProbes[curCode()];
     var no = (state.splitNo || {})[curCode()];
@@ -2102,7 +2106,8 @@
     box.hidden = !g;
     if (!g) { box.innerHTML = ""; return; }
     var gr = (g.growth >= 0 ? "+" : "") + (g.growth * 100).toFixed(1) + "%";
-    box.innerHTML = '<p><b>✂ 株式分割かもしれません</b> ' + (g.by === "price" ? "予想配当と株価が、どちらも前期・前回の約" + g.n + "分の1です。" : "予想配当が前期の約" + g.n + "分の1です。株価では確かめられないので、本当の減配のこともあります。") +
+    box.innerHTML = '<p><b>✂ 株式分割かもしれません</b> ' + (g.by === "price" ? "予想配当と株価が、どちらも前期・前回の約" + g.n + "分の1です。" :
+      g.by === "eps" ? "予想配当と予想1株利益が、どちらも前期の約" + g.n + "分の1です。" : "予想配当が前期の約" + g.n + "分の1です。株価では確かめられないので、本当の減配のこともあります。") +
       '1株→' + g.n + '株の分割なら、実質 ' + gr + 'です。会社の発表で確かめてから登録すると、有報の1株配当・利益を分割後に直して判定します。</p><div class="split-btns">' +
       '<a class="btn-link" target="_blank" rel="noopener noreferrer" href="https://finance.yahoo.co.jp/quote/' + encodeURIComponent(code) + '.T/disclosure">会社の発表を確かめる ↗</a>' +
       [g.n].concat(g.alts || []).map(function (n) { return '<button type="button" class="btn-link" data-split="' + n + '">1株→' + n + '株として計算</button>'; }).join("") +
@@ -2118,7 +2123,7 @@
     }
     var n = Number(b.dataset.split), name = state.subject.name || code;
     if (!confirm(name + "の株式分割(1株→" + n + "株)の発表を確かめましたか？\n登録すると、有報の1株配当・1株利益を" + n + "分の1にして判定します。HAITOでも同じ登録が使われ、HAITOの画面から取り消せます。")) return;
-    window.HaitoSplits.add(code, { n: n, p: parseFloat(state.subject.price) || undefined, fy: state.auto && state.auto.fy, src: curSplit && curSplit.by === "price" ? "株価と予想配当" : "予想配当" });
+    window.HaitoSplits.add(code, { n: n, p: parseFloat(state.subject.price) || undefined, fy: state.auto && state.auto.fy, src: curSplit && curSplit.by === "price" ? "株価と予想配当" : curSplit && curSplit.by === "eps" ? "予想配当と予想1株利益" : "予想配当" });
     if (window.HaitoSync) window.HaitoSync.soon();
     curSplit = null;
     if (state.splitProbes) delete state.splitProbes[code];
