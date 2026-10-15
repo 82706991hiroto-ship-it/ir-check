@@ -472,7 +472,7 @@
     <h2>累進配当・DOEの会社</h2>
     <p class="find-intro">有価証券報告書の「配当政策」に、配当を下げにくい方針(累進配当・DOE)が書かれている上場企業の一覧です。
       配当性向が低くても、こうした会社は増配の余力があるとみることができます。気になる会社は、そのまま10項目のチェックに進めます。
-      <b>予備軍</b>は、まだ宣言していないものの、実績や配当政策の書き方がそれに近い会社です。</p>
+      <b>予備軍</b>は、まだ宣言していないものの、実績や配当政策の書き方がそれに近い会社です(「すべて」には予備軍も入ります)。</p>
   </section>
 
   <section class="panel" data-view="find">
@@ -2256,8 +2256,8 @@
   function filtered() {
     var q = nfkc($("q").value.trim()), sec = $("sec").value, po = $("po").value, up = +$("up").value;
     var out = rows.filter(function (r) {
-      // 予備軍(宣言なし)は「予備軍」を選んだときだけ出す
-      if (pol === "cand" ? r.p.length : !r.p.length) return false;
+      // 「すべて」は宣言済みと予備軍の両方、「予備軍」は宣言なしの会社だけ
+      if (pol === "cand" && r.p.length) return false;
       if (pol && pol !== "cand" && r.p.indexOf(pol) === -1) return false;
       if (sec && r.s !== sec) return false;
       if (po === "low" && !(r.po != null && r.po < 30)) return false;
@@ -2369,10 +2369,12 @@
   function render() {
     var list = filtered();
     // 全体の社数は、宣言済みと予備軍を分けて数える
-    var all = rows.filter(function (r) { return pol === "cand" ? !r.p.length : r.p.length; }).length;
+    var all = rows.filter(function (r) { return pol === "cand" ? !r.p.length : pol ? r.p.indexOf(pol) !== -1 : true; }).length;
+    var nDecl = list.filter(function (r) { return r.p.length; }).length;
     $("count").innerHTML = "<strong>" + list.length.toLocaleString("ja-JP") + "</strong> 社" +
       (pol === "cand" ? "(予備軍)" + (list.length !== all ? "(全" + all + "社中)" : "")
-        : "(" + (pol ? pol + "を宣言" : "累進配当・DOEのどちらかを宣言") + (list.length !== all ? "・全" + all + "社中" : "") + ")") +
+        : pol ? "(" + pol + "を宣言" + (list.length !== all ? "・全" + all + "社中" : "") + ")"
+        : "(宣言済み " + nDecl.toLocaleString("ja-JP") + "社・予備軍 " + (list.length - nDecl).toLocaleString("ja-JP") + "社" + (list.length !== all ? "・全" + all + "社中" : "") + ")") +
       (pol === "cand" ? '<br><small>★★ ' + list.filter(function (r) { return r.st === 2; }).length + '社 ・ ★ ' +
         list.filter(function (r) { return r.st === 1; }).length + '社</small>' : "");
     var ul = $("list");
