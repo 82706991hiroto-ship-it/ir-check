@@ -1079,7 +1079,10 @@
         values: parsed.values || {},
         saved: Array.isArray(parsed.saved) ? parsed.saved : [],
         // auto = { code, fy, rec, ev, values }: 最後に有報から採点した銘柄と、そのときの初期値
-        auto: parsed.auto || null
+        auto: parsed.auto || null,
+        // 株式分割の見分け: 最初に貼り付ける前の株価(コードごと)と、「分割ではない」と答えた比率
+        splitProbes: parsed.splitProbes || {},
+        splitNo: parsed.splitNo || {}
       };
     } catch (e) { return defaults; }
   }
@@ -1921,9 +1924,11 @@
     input.dispatchEvent(new Event("input"));
   }
   function applyQuoteBlock(b) {
-    var parts = [], kp = loadPrices()[curCode()];
-    // 貼り付ける前の株価(株式分割の見分けに使う)
-    splitProbe = { code: curCode(), pp: kp && kp.p > 0 ? kp.p : parseFloat(state.subject.price) || 0, pd: kp && kp.d ? kp.d : "" };
+    var parts = [], kp = loadPrices()[curCode()], code = curCode();
+    // 貼り付ける前の株価(株式分割の見分けに使う)。疑いが出たあとに貼り直しても、最初の分割前の株価を使い続ける
+    state.splitProbes = state.splitProbes || {};
+    var pp = kp && kp.p > 0 ? kp.p : parseFloat(state.subject.price) || 0;
+    if (code && !state.splitProbes[code] && pp > 0) state.splitProbes[code] = { pp: pp, pd: kp && kp.d ? kp.d : "" };
     if (b.price > 0) { setPrice(String(b.price)); parts.push("株価 " + b.price.toLocaleString("ja-JP") + "円" + (b.approx ? "(配当と利回りからの概算)" : "")); }
     if (b.fdiv > 0) {
       var f = document.getElementById("subjFDiv"); f.value = String(b.fdiv); f.dispatchEvent(new Event("input"));
@@ -2081,11 +2086,13 @@
   }
   // ---------- 株式分割の疑い(HAITOと共通の splits-core.js) ----------
   // 有報のデータに分割が入るのは次の半期報告書・有報から。それまでの間、予想配当と株価の比率で気づいたら、確かめて登録してもらう
-  var splitProbe = null, curSplit = null;   // splitProbe: { code, pp: 貼り付ける前の株価, pd: その日付 }
+  var curSplit = null;   // state.splitProbes[コード]: { pp: 最初に貼り付ける前の株価, pd: その日付 }
   function splitGuess(last, fd) {
     if (!window.HaitoSplits) return null;
-    var pr = splitProbe && splitProbe.code === curCode() ? splitProbe : {};
+    var pr = (state.splitProbes || {})[curCode()] || {};
     var g = window.HaitoSplits.guess({ last: last, fdiv: fd, price: parseFloat(state.subject.price), prevPrice: pr.pp, prevDate: pr.pd });
+    // 株価がほぼそのまま(本当の減配)なら、次に貼るときは新しい株価から比べる
+    if (!g && pr.pp && state.splitProbes) delete state.splitProbes[curCode()];
     var no = (state.splitNo || {})[curCode()];
     return g && no !== g.n ? g : null;
   }
@@ -2113,7 +2120,8 @@
     if (!confirm(name + "の株式分割(1株→" + n + "株)の発表を確かめましたか？\n登録すると、有報の1株配当・1株利益を" + n + "分の1にして判定します。HAITOでも同じ登録が使われ、HAITOの画面から取り消せます。")) return;
     window.HaitoSplits.add(code, { n: n, p: parseFloat(state.subject.price) || undefined, fy: state.auto && state.auto.fy, src: curSplit && curSplit.by === "price" ? "株価と予想配当" : "予想配当" });
     if (window.HaitoSync) window.HaitoSync.soon();
-    curSplit = null; splitProbe = null;
+    curSplit = null;
+    if (state.splitProbes) delete state.splitProbes[code];
     delete state.values.dividend;  // 分割前の数字で付けた判定は、直した値で付け直す
     setStatus("株式分割(1株→" + n + "株)として、有報の値を直して採点し直します。");
     applyAuto(code, false);
@@ -2239,6 +2247,8 @@
   renderTally();
   renderSaved();
   startFromLink(fromLink);
+  // 開き直したときも、有報のデータを読み直して判定する(株式分割の登録や毎月の更新を反映し、分割の疑いも出し直す)
+  if (!fromLink && state.auto && state.auto.code && state.auto.code === curCode()) applyAuto(state.auto.code, false);
   (function () {
     var t = fromLink ? "check" : (location.hash || "").replace("#", "");
     if (TABS.indexOf(t) === -1) { try { t = sessionStorage.getItem("irTab"); } catch (e) { t = null; } }
