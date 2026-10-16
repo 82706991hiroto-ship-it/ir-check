@@ -431,6 +431,7 @@
   .sync-box .toolbar { margin-top: 8px; display: flex; gap: 8px; flex-wrap: wrap; }
   .toast { position: fixed; left: 16px; right: 16px; bottom: 20px; max-width: 520px; margin: 0 auto; background: var(--text); color: var(--card);
     font-size: 13px; padding: 12px 16px; border-radius: 12px; box-shadow: var(--shadow); z-index: 10; }
+  [hidden] { display: none !important; }
   .more { display: block; width: 100%; margin-top: 12px; font: inherit; font-size: 14px; padding: 12px; border-radius: 12px;
     border: 1px solid var(--line); background: var(--card); color: var(--text); cursor: pointer; }
   .empty { color: var(--text-2); font-size: 13px; padding: 12px 0; }
@@ -2456,7 +2457,7 @@
     list.slice(0, shown).forEach(function (r) { ul.appendChild(item(r)); });
     ul.classList.remove("anim"); void ul.offsetWidth; ul.classList.add("anim");
     $("more").hidden = list.length <= shown;
-    $("more").textContent = "もっと見る(残り" + (list.length - shown) + "社)";
+    $("more").textContent = "もっと見る(残り" + Math.max(0, list.length - shown) + "社)";
   }
   function reset() { shown = PAGE; render(); saveFilters(); }
   // 検索条件はこの端末に残す(HAITOへ行って戻ってきたときやアプリを開き直したときも続きから)
