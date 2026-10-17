@@ -591,7 +591,6 @@
       <span class="toolbar-status" id="toolbarStatus"></span>
       <div class="toolbar-sub">
         <button type="button" id="saveBtn">保存だけ</button>
-        <button type="button" id="toHaitoBtn">保存して候補を開く ↗</button>
         <button type="button" id="copyBtn">Markdownでコピー</button>
         <button type="button" id="resetBtn">入力をクリア</button>
       </div>
@@ -1701,29 +1700,24 @@
     if (!/^[0-9][0-9A-Z]{3}$/.test(code)) { setStatus("証券コードを入れてください。"); document.getElementById("subjCode").focus(); return; }
     if (!saveEvaluation()) return;
     var r = addToHaitoWatch(code);
-    if (!r) { document.getElementById("toHaitoBtn").click(); return; }
+    if (!r) { location.href = haitoWatchUrl(code); return; }
     var label = code + " " + (state.subject.name || "");
     var el = document.getElementById("toolbarStatus");
     el.innerHTML = escapeHtml(label.trim()) + (r.isNew ? " を買い増し候補に入れました" : " の候補を更新しました") +
-      "(目標利回り" + r.target + "%)。" + '<a href="../haito-dashboard/#extras">候補を見る ›</a>';
+      "(目標利回り" + r.target + "%)。" + '<a href="../haito-dashboard/?back=' + encodeURIComponent(code) + '">候補を見る ›</a>';
   });
 
-  // ダッシュボード(同じサイトの ../haito-dashboard/)の買い増し候補に入れる。
-  // 採点結果はこの端末の保存から向こうが読むので、渡すのはコードと株価だけ
-  document.getElementById("toHaitoBtn").addEventListener("click", function () {
-    var code = (state.subject.code || "").trim().toUpperCase();
-    if (!/^[0-9][0-9A-Z]{3}$/.test(code)) { setStatus("証券コードを入れてください。"); document.getElementById("subjCode").focus(); return; }
-    if (!saveEvaluation()) return;
+  // HAITOをまだ使っていない端末では、HAITOへ移って向こうで候補に入れる(コード・株価・予想配当・目標利回りを渡す)
+  function haitoWatchUrl(code) {
     var url = "../haito-dashboard/?watch=" + encodeURIComponent(code);
     var price = parseFloat(state.subject.price);
     if (price > 0) url += "&price=" + encodeURIComponent(price);
     var fdiv = parseFloat(state.subject.fdiv);
     if (fdiv > 0) url += "&fdiv=" + encodeURIComponent(fdiv);
-    // 目標利回りはこの銘柄を保存するときの値を渡す(入れていなければ向こうの既定のまま)
     var target = parseFloat(state.subject.target);
     if (target > 0) url += "&target=" + encodeURIComponent(target);
-    location.href = url;
-  });
+    return url;
+  }
 
   // Obsidianなどに貼り付けられるよう、表形式のMarkdownで書き出す。
   function buildMarkdown() {
