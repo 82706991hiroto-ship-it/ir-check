@@ -205,7 +205,6 @@
   }
   .readout.is-bad { background: var(--bad-soft); }
   .readout.is-bad strong { color: var(--bad); }
-  .caveats { margin: 16px 0 0; padding-left: 1.2em; font-size: 12.5px; color: var(--text-2); line-height: 1.95; }
 
   /* ボタン */
   .toolbar { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; margin-top: 18px; }
@@ -218,8 +217,10 @@
   button.btn.primary { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); }
   button.btn.primary:hover { opacity: .9; background: var(--accent); }
   .toolbar-status { font-size: 12px; color: var(--text-2); }
-  .to-haito-note { font-size: 12px; color: var(--text-2); margin: 16px 0 0; line-height: 1.7; }
-  .to-haito-note a { color: var(--accent); }
+  .toolbar-status a { color: var(--accent); font-weight: 700; margin-left: 4px; }
+  /* よく使うのは「保存して候補に入れる」だけ。ほかは小さな文字のボタンで一列に */
+  .toolbar-sub { flex-basis: 100%; display: flex; flex-wrap: wrap; gap: 4px 16px; }
+  .toolbar-sub button { background: none; border: 0; padding: 6px 0; font: inherit; font-size: 12.5px; color: var(--text-2); text-decoration: underline; text-underline-offset: 3px; cursor: pointer; }
 
   /* 保存一覧 */
   table.saved { width: 100%; border-collapse: collapse; font-size: 13px; }
@@ -577,18 +578,15 @@
     <h2><span class="chap">三</span>総合</h2>
     <div class="tally" id="tally"></div>
     <p class="readout" id="readout"></p>
-    <ul class="caveats">
-      <li>配当性向が安定していて増配を続けている会社は投資候補。</li>
-      <li>配当性向が高まっていたり、EPSの成長が鈍化しているのに減配しない会社は注意。</li>
-    </ul>
-    <p class="to-haito-note">「保存して候補に入れる」を押すと、評価を保存して<a href="../haito-dashboard/#extras">HAITO</a>の買い増し候補に入れます(この画面のまま次の銘柄へ進めます)。目標利回りになる株価や、買ったときの配分は「候補を開く」でHAITOに移って試算できます。</p>
     <div class="toolbar">
       <button class="btn primary" id="addWatchBtn">保存して候補に入れる</button>
-      <button class="btn" id="toHaitoBtn">保存して候補を開く →</button>
-      <button class="btn" id="saveBtn">この評価を保存</button>
-      <button class="btn" id="copyBtn">Markdownでコピー</button>
-      <button class="btn" id="resetBtn">入力をクリア</button>
       <span class="toolbar-status" id="toolbarStatus"></span>
+      <div class="toolbar-sub">
+        <button type="button" id="saveBtn">保存だけ</button>
+        <button type="button" id="toHaitoBtn">保存して候補を開く ↗</button>
+        <button type="button" id="copyBtn">Markdownでコピー</button>
+        <button type="button" id="resetBtn">入力をクリア</button>
+      </div>
     </div>
   </section>
 
