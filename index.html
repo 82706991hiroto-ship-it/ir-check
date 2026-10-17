@@ -219,6 +219,11 @@
   .toolbar-status { font-size: 12px; color: var(--text-2); }
   .toolbar-status a { color: var(--accent); font-weight: 700; margin-left: 4px; }
   /* よく使うのは「保存して候補に入れる」だけ。ほかは小さな文字のボタンで一列に */
+  /* 採点を見てから、この銘柄を買いたい利回りを決めて候補に入れる */
+  .target-row { flex-basis: 100%; display: flex; flex-wrap: wrap; align-items: center; gap: 6px 12px; }
+  .target-row label { display: flex; align-items: center; gap: 6px; font-size: 13px; font-weight: 700; }
+  .target-row input { width: 4.5em; padding: 8px 10px; font: inherit; font-size: 15px; text-align: right; border: 1px solid var(--line); border-radius: 10px; background: var(--field, transparent); color: inherit; }
+  .target-hint { font-size: 12px; color: var(--text-2); }
   .toolbar-sub { flex-basis: 100%; display: flex; flex-wrap: wrap; gap: 4px 16px; }
   .toolbar-sub button { background: none; border: 0; padding: 6px 0; font: inherit; font-size: 12.5px; color: var(--text-2); text-decoration: underline; text-underline-offset: 3px; cursor: pointer; }
 
@@ -549,7 +554,6 @@
       <label>株価(任意)<input type="text" id="subjPrice" inputmode="decimal" autocomplete="off" placeholder="PBR・利回りに使います"></label>
       <label>予想配当(任意)<input type="text" id="subjFDiv" inputmode="decimal" autocomplete="off" placeholder="会社予想の1株配当(円)"></label>
       <label>予想のうち記念配当(任意)<input type="text" id="subjFSp" inputmode="decimal" autocomplete="off" placeholder="予想配当に含まれる記念・特別配当(円)"></label>
-      <label>目標利回り(%・任意)<input type="text" id="subjTarget" inputmode="decimal" autocomplete="off" placeholder="この銘柄を買いたい利回り 例: 4.5"></label>
     </div>
     <div class="price-tools" id="priceTools" hidden>
       <a id="priceLink" target="_blank" rel="noopener noreferrer">株価・予想を見る(Yahoo!) ↗</a>
@@ -579,6 +583,10 @@
     <div class="tally" id="tally"></div>
     <p class="readout" id="readout"></p>
     <div class="toolbar">
+      <div class="target-row">
+        <label>目標利回り<input type="text" id="subjTarget" inputmode="decimal" autocomplete="off" placeholder="4">%</label>
+        <span class="target-hint" id="targetHint"></span>
+      </div>
       <button class="btn primary" id="addWatchBtn">保存して候補に入れる</button>
       <span class="toolbar-status" id="toolbarStatus"></span>
       <div class="toolbar-sub">
@@ -1928,7 +1936,22 @@
       state.subject.perk = !f ? (f === undefined ? "" : "なし") : "あり";
     });
   }
+  // 目標利回りの横に、今の利回りと「目標の株価」(予想配当 ÷ 目標利回り)を出す。空欄はHAITOの既定の4%
+  function renderTargetHint() {
+    var el = document.getElementById("targetHint");
+    if (!el) return;
+    var price = parseFloat(state.subject.price), fdiv = parseFloat(state.subject.fdiv);
+    var t = parseFloat(state.subject.target) > 0 ? parseFloat(state.subject.target) : 4;
+    var out = [];
+    if (price > 0 && fdiv > 0) out.push("今の利回り " + (fdiv / price * 100).toFixed(2) + "%");
+    if (fdiv > 0) {
+      var tp = fdiv / (t / 100);
+      out.push("目標の株価 " + Math.round(tp).toLocaleString("ja-JP") + "円以下" + (price > 0 ? (price <= tp ? "(到達)" : "(あと" + ((1 - tp / price) * 100).toFixed(1) + "%下落)") : ""));
+    }
+    el.textContent = out.join(" ・ ");
+  }
   function renderPriceTools() {
+    renderTargetHint();
     var code = curCode(), ok = /^[0-9][0-9A-Z]{3}$/.test(code);
     document.getElementById("priceTools").hidden = !ok;
     renderPerk(code);
@@ -2188,7 +2211,7 @@
   });
   document.getElementById("subjTarget").addEventListener("input", function (e) {
     state.subject.target = parsePrice(e.target.value);
-    save();
+    save(); renderTargetHint();
   });
   document.getElementById("subjFDiv").addEventListener("input", function (e) {
     var raw = parsePrice(e.target.value);
