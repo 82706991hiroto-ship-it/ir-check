@@ -2515,6 +2515,8 @@
       // ★2つ: 組み合わせ2つ以上(過去6年で10社中5〜6社が宣言)・★1つ: 1つ(約5社)。ふつうの会社は約2社
       var st = r.st === 2 ? 2 : 1;
       tags = '<span class="tag p-cand">予備軍 ' + "★★".slice(0, st) + '<span class="st-off">' + "★★".slice(st) + '</span></span>' +
+        // 実績組の条件(減配せず増配を続けている)も満たしていれば印を付ける。タブは予備軍だけに入れて重ならないようにする
+        (r.tr ? '<span class="tag p-track" title="' + esc(r.tr) + '">実績あり</span><span class="tag p-why">' + esc(r.tr) + '</span>' : "") +
         r.k.map(function (k) { return '<span class="tag p-why">' + esc(k[0]) + '</span>'; }).join("") +
         '<span class="cand-odds">過去、この★の会社は6年で10社中' + (st === 2 ? "5〜6社" : "約5社") + 'が宣言(ふつうは約2社)</span>';
     }
@@ -2555,7 +2557,8 @@
         : pol ? "(" + pol + "を宣言" + (list.length !== all ? "・全" + all + "社中" : "") + ")"
         : "(宣言済み " + nDecl.toLocaleString("ja-JP") + "社・予備軍 " + (list.length - nDecl - nTrack).toLocaleString("ja-JP") + "社・実績 " + nTrack.toLocaleString("ja-JP") + "社" + (list.length !== all ? "・全" + all + "社中" : "") + ")") +
       (pol === "cand" ? '<br><small>★★ ' + list.filter(function (r) { return r.st === 2; }).length + '社 ・ ★ ' +
-        list.filter(function (r) { return r.st === 1; }).length + '社</small>' : "");
+        list.filter(function (r) { return r.st === 1; }).length + '社 ・ うち実績あり ' + list.filter(function (r) { return r.tr; }).length + '社</small>'
+        : pol === "track" ? '<br><small>予備軍のサインもある会社(' + rows.filter(function (r) { return r.tr; }).length + '社)は「予備軍」に「実績あり」の印で出ます</small>' : "");
     var ul = $("list");
     ul.innerHTML = "";
     if (!list.length) { ul.innerHTML = '<li class="empty">条件に合う会社はありません。</li>'; }

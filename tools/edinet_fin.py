@@ -557,6 +557,44 @@ def attach_special(fin, haito_html):
     return n
 
 
+def attach_irregular(fin, haito_html):
+    """HAITOの data/irregular-periods.json(決算期間が12か月でない期と、手で書いた例外)で、
+    増配・減配・連続増配を数える系列 dlc(古い順)を付ける。12か月でない期は外し、年間の額がわかる期(div)は置き換える。
+    一覧の棒(dlo / dl)はそのまま"""
+    path = os.path.join(os.path.dirname(os.path.abspath(haito_html)), "data", "irregular-periods.json")
+    data = json.load(open(path, encoding="utf-8")) if os.path.exists(path) else {}
+
+    def mi(d):
+        return int(d[:4]) * 12 + int(d[5:7])
+    n = 0
+    for m in fin.values():
+        for code, r in m.items():
+            r.pop("dlc", None)
+            e, fy = data.get(code), r.get("fy") or ""
+            base = r.get("dlo") or r.get("dl") or r.get("div")
+            if not e or not fy or not base:
+                continue
+            ends = [p for p in e.get("periods", []) if p <= fy]
+            if not ends:
+                continue
+            newer = round((mi(fy) - mi(ends[0])) / 12)
+            drop, fix = set(), {}
+            for x in e.get("irregular", []):
+                if x["end"] > fy or x["end"] not in ends:
+                    continue
+                k = newer + ends.index(x["end"])
+                if x.get("div") is not None:
+                    fix[k] = x["div"]
+                else:
+                    drop.add(k)
+            if not drop and not fix:
+                continue
+            L = len(base)
+            r["dlc"] = [fix.get(L - 1 - i, v) for i, v in enumerate(base) if L - 1 - i not in drop]
+            n += 1
+    return n
+
+
 def attach_long(fin, haito_html):
     """HAITO(haito-dashboard)の内蔵データにある最大14期の1株配当を、fin の dl(古い順)に付ける。
 
@@ -694,6 +732,13 @@ def track_record(ds, payout):
     return "%d期減配なし(うち増配%d回)・配当性向%d%%" % (len(s), ups, round(payout)), pts
 
 
+def track_text(ds, po):
+    nc, up0 = nocut_years(ds), streak_of(ds)
+    more = "以上" if nc == len(ds) - 1 else ""
+    txt = ("%d期%s連続増配" % (up0, "以上" if up0 == len(ds) - 1 else "")) if up0 >= 3 else ("%d年%s減配なし" % (nc, more))
+    return "%s・配当性向%d%%" % (txt, round(po))
+
+
 def write_policy(fin):
     """累進配当・DOEの会社と、その予備軍、宣言はないが実績が累進配当に近い会社(実績組)の一覧(policy.json)。一覧ページが読む小さなデータ"""
     rows = []
@@ -704,7 +749,8 @@ def write_policy(fin):
             lg = r.get("dl") or []
             if d and len(d) < len(e) <= len(lg) and all(abs(a - b) <= 0.011 for a, b in zip(lg[-len(d):], d)):
                 d = lg[-len(e):]
-            ds = r.get("dlo") or r.get("dl") or d  # 記念・特別配当を除いた普通配当で数える
+            # 記念・特別配当を除いた普通配当で数える(決算期間が12か月でない期を外した dlc があればそれ)
+            ds = r.get("dlc") or r.get("dlo") or r.get("dl") or d
             po = round(d[-1] / e[-1] * 100, 1) if d and e and e[-1] > 0 else None
             if r.get("pol"):
                 row = {"p": r["pol"], "q": r.get("polq", [])}
@@ -715,15 +761,16 @@ def write_policy(fin):
                     st, k, nc = got
                     # 並べ替え: テーマの数が多い順、次に減配なしの年数が長い順
                     row = {"p": [], "k": k, "st": st, "sc": len(k) * 100 + nc}
+                    # 予備軍のサインに加えて、実績組の条件も満たしている会社には印を付ける(タブは予備軍だけ)
+                    tr = track_record(ds, po)
+                    if tr:
+                        row["tr"] = track_text(ds, po)
                 else:
                     # 実績組: 宣言も予備軍のサインもないが、直近10期で減配せず半分以上の期で増配し、配当性向70%以下
                     tr = track_record(ds, po)
                     if not tr:
                         continue
-                    nc, up0 = nocut_years(ds), streak_of(ds)
-                    more = "以上" if nc == len(ds) - 1 else ""
-                    txt = ("%d期%s連続増配" % (up0, "以上" if up0 == len(ds) - 1 else "")) if up0 >= 3 else ("%d年%s減配なし" % (nc, more))
-                    row = {"p": [], "t": "%s・配当性向%d%%" % (txt, round(po)), "tp": tr[1], "sc": nc}
+                    row = {"p": [], "t": track_text(ds, po), "tp": tr[1], "sc": nocut_years(ds)}
             up = streak_of(ds)
             row.update({
                 "c": code, "n": r.get("n", ""), "s": r.get("sec", ""), "fy": (r.get("fy") or "")[:7],
@@ -883,6 +930,7 @@ def main():
         print("決算後の分割で割り戻した会社", apply_splits(fin, a.haito))
         print("長期の1株配当を付けた会社", attach_long(fin, a.haito))
         print("記念・特別配当を除いた系列を付けた会社", attach_special(fin, a.haito))
+        print("決算期間が12か月でない期を外した系列を付けた会社", attach_irregular(fin, a.haito))
         save_fin(fin)
         print("累進配当・DOEの会社", write_policy(fin))
     else:
