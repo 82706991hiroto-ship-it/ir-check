@@ -1061,6 +1061,9 @@
     if (payouts.length < 3) return out;
     var pMax = Math.max.apply(null, payouts), pMin = Math.min.apply(null, payouts);
     var rising = payouts[payouts.length - 1] - payouts[0];
+    // 配当性向が上がっていても、EPSが伸びていなくても、当期がまだ50%未満なら利益に対して配当に余裕がある
+    // (20%→22%→37% など、還元を厚くしているだけ)ので注意にしない。当期が赤字なら注意のまま
+    var roomy = e[e.length - 1] > 0 && d[d.length - 1] / e[e.length - 1] < 0.5;
     var divEv = ev.dividend && ev.dividend.value, epsEv = ev.eps && ev.eps.value;
     var range = "1株配当÷EPSで見た配当性向 " + payouts.map(function (x) { return Math.round(x * 100) + "%"; }).join("→");
     if (divEv === "growing" && pMax - pMin <= 0.15) {
@@ -1069,7 +1072,7 @@
     // 「EPSの成長が鈍化」は、変動の大きさではなく実際に伸びていないこと(5期前比+10%以下か赤字)で見る
     var epsStalled = e[0] > 0 ? (e[e.length - 1] / e[0] - 1 <= FLAT) : true;
     if (e.some(function (x) { return x <= 0; })) epsStalled = true;
-    if (divEv && divEv !== "cut" && (rising >= 0.15 || epsStalled)) {
+    if (divEv && divEv !== "cut" && !roomy && (rising >= 0.15 || epsStalled)) {
       out.push({ kind: "warn", text: "注意: " + (rising >= 0.15 ? "配当性向が上がってきている" : "EPSが伸びていない")
         + "のに減配していません。利益の裏付けが薄い配当かもしれません。" + range });
     }
