@@ -1010,7 +1010,7 @@
     var dLong = rec.dlo || (rec.dl && rec.dl.length > (rec.div || []).length ? rec.dl : rec.div);
     ev.dividend = dLong ? Object.assign(dividendOf(dLong) || {}, { series: dLong }) : null;
     if (ev.dividend && rec.sp) ev.dividend.reason += "(記念・特別配当を除いて判定: " + specialText(rec.sp) + ")";
-    if (ev.dividend && rec.irrNote) ev.dividend.reason += "(決算期間が12か月でない " + rec.irrNote + " は除いて判定)";
+    if (ev.dividend && rec.irrNote) ev.dividend.reason += "(" + rec.irrNote + ")";
     // 有報の配当性向は個別(親会社単体)の表にしか載らないことが多い。一般に使う連結の
     // 配当性向に合わせるため、1株配当 ÷ 連結EPS で出す。EPSが無ければ有報の値を使う
     var dLast = lastOf(rec.div), eLast = lastOf(rec.eps);
@@ -1828,18 +1828,22 @@
     function mi(d) { return parseInt(d.slice(0, 4), 10) * 12 + parseInt(d.slice(5, 7), 10); }
     var ends = (e.periods || []).filter(function (p) { return p <= rec.fy; });
     if (!ends.length) return rec;
-    var newer = Math.round((mi(rec.fy) - mi(ends[0])) / 12), drop = [], notes = [];
+    var newer = Math.round((mi(rec.fy) - mi(ends[0])) / 12), drop = [], fix = {}, notes = [], fixed = [];
     (e.irregular || []).forEach(function (x) {
       var i = ends.indexOf(x.end);
       if (x.end > rec.fy || i === -1) return;
+      var ym = x.end.slice(0, 4) + "年" + parseInt(x.end.slice(5, 7), 10) + "月期";
+      // 年間の額がわかる期(持株会社を作った年に中間配当を前の会社が払った、など)は外さずに置き換える
+      if (x.div != null) { fix[newer + i] = x.div; fixed.push(ym + "は前の会社の中間配当を足した年" + x.div + "円で比較"); return; }
       drop.push(newer + i);
-      notes.push(x.end.slice(0, 4) + "年" + parseInt(x.end.slice(5, 7), 10) + "月期(" + Math.round(x.months) + "か月)");
+      notes.push(ym + "(" + Math.round(x.months) + "か月)");
     });
     var base = rec.dlo || (rec.dl && rec.dl.length > (rec.div || []).length ? rec.dl : rec.div);
-    if (!drop.length || !base) return rec;
+    if ((!drop.length && !Object.keys(fix).length) || !base) return rec;
     var out = Object.assign({}, rec), n = base.length;
-    out.dlo = base.filter(function (v, k) { return drop.indexOf(n - 1 - k) === -1; });
-    out.irrNote = notes.join("・");
+    out.dlo = [];
+    base.forEach(function (v, k) { var j = n - 1 - k; if (drop.indexOf(j) === -1) out.dlo.push(j in fix ? fix[j] : v); });
+    out.irrNote = (notes.length ? ["決算期間が12か月でない " + notes.join("・") + " は除いて判定"] : []).concat(fixed).join("。");
     return out;
   }
 
