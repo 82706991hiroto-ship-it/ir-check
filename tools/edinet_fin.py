@@ -695,7 +695,7 @@ def track_record(ds, payout):
 
 
 def write_policy(fin):
-    """累進配当・DOEの会社と、その予備軍の一覧(policy.json)。一覧ページが読む小さなデータ"""
+    """累進配当・DOEの会社と、その予備軍、宣言はないが実績が累進配当に近い会社(実績組)の一覧(policy.json)。一覧ページが読む小さなデータ"""
     rows = []
     for m in fin.values():
         for code, r in m.items():
@@ -707,11 +707,19 @@ def write_policy(fin):
             else:
                 # 予備軍: 過去の有報で確かめたパターン(★2〜3)と、簡単なサイン(★1)
                 got = candidate(r, ds, po)
-                if not got:
-                    continue
-                st, k, nc = got
-                # 並べ替え: テーマの数が多い順、次に減配なしの年数が長い順
-                row = {"p": [], "k": k, "st": st, "sc": len(k) * 100 + nc}
+                if got:
+                    st, k, nc = got
+                    # 並べ替え: テーマの数が多い順、次に減配なしの年数が長い順
+                    row = {"p": [], "k": k, "st": st, "sc": len(k) * 100 + nc}
+                else:
+                    # 実績組: 宣言も予備軍のサインもないが、直近10期で減配せず半分以上の期で増配し、配当性向70%以下
+                    tr = track_record(ds, po)
+                    if not tr:
+                        continue
+                    nc, up0 = nocut_years(ds), streak_of(ds)
+                    more = "以上" if nc == len(ds) - 1 else ""
+                    txt = ("%d期%s連続増配" % (up0, "以上" if up0 == len(ds) - 1 else "")) if up0 >= 3 else ("%d年%s減配なし" % (nc, more))
+                    row = {"p": [], "t": "%s・配当性向%d%%" % (txt, round(po)), "tp": tr[1], "sc": nc}
             up = streak_of(ds)
             row.update({
                 "c": code, "n": r.get("n", ""), "s": r.get("sec", ""), "fy": (r.get("fy") or "")[:7],

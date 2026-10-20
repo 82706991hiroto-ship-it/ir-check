@@ -301,6 +301,7 @@
   .tag.p-doe { background: var(--ok-soft); color: var(--ok); }
   .tag.p-cand { background: var(--mid-soft); color: var(--mid); }
   .tag.p-cand .st-off { opacity: .3; }
+  .tag.p-track { background: var(--good-soft); color: var(--good); }
   .cand-box { flex-basis: 100%; display: grid; gap: 6px; padding: 8px 10px; border-radius: 10px; background: var(--field); font-size: 12.5px; color: var(--text-2); }
   .cand-odds { flex-basis: 100%; font-size: 11.5px; color: var(--text-2); }
   .cand-odds b { color: var(--text); }
@@ -493,6 +494,7 @@
           <button type="button" data-v="累進配当">累進配当</button>
           <button type="button" data-v="DOE">DOE</button>
           <button type="button" data-v="cand">予備軍</button>
+          <button type="button" data-v="track">実績</button>
         </div>
       </div>
       <label class="wide">コード・銘柄名で探す<input type="search" id="q" placeholder="例: 8058、商事" autocomplete="off"></label>
@@ -2414,8 +2416,10 @@
     var q = nfkc($("q").value.trim()), sec = $("sec").value, po = $("po").value, up = +$("up").value;
     var out = rows.filter(function (r) {
       // 「すべて」は宣言済みと予備軍の両方、「予備軍」は宣言なしの会社だけ
-      if (pol === "cand" && r.p.length) return false;
-      if (pol && pol !== "cand" && r.p.indexOf(pol) === -1) return false;
+      // 「実績」は宣言も予備軍のサインもないが、減配せず増配を続けている会社(t)
+      if (pol === "cand" && (r.p.length || !r.k)) return false;
+      if (pol === "track" && !r.t) return false;
+      if (pol && pol !== "cand" && pol !== "track" && r.p.indexOf(pol) === -1) return false;
       if (sec && r.s !== sec) return false;
       if (po === "low" && !(r.po != null && r.po < 30)) return false;
       if (po === "mid" && !(r.po != null && r.po >= 30 && r.po <= 50)) return false;
@@ -2498,6 +2502,7 @@
         r.k.map(function (k) { return '<span class="tag p-why">' + esc(k[0]) + '</span>'; }).join("") +
         '<span class="cand-odds">過去、この★の会社は6年で10社中' + (st === 2 ? "5〜6社" : "約5社") + 'が宣言(ふつうは約2社)</span>';
     }
+    if (r.t) tags = '<span class="tag p-track">実績' + (r.tp === 2 ? "(毎期増配)" : "") + '</span><span class="tag p-why">' + esc(r.t) + '</span>';
     tags = savedTag(r.c) + tags;
     if (r.po != null && r.po < 30) tags += '<span class="tag room">配当性向30%未満・増配余力</span>';
     li.innerHTML =
@@ -2526,12 +2531,13 @@
   function render() {
     var list = filtered();
     // 全体の社数は、宣言済みと予備軍を分けて数える
-    var all = rows.filter(function (r) { return pol === "cand" ? !r.p.length : pol ? r.p.indexOf(pol) !== -1 : true; }).length;
-    var nDecl = list.filter(function (r) { return r.p.length; }).length;
+    var all = rows.filter(function (r) { return pol === "cand" ? !r.p.length && !!r.k : pol === "track" ? !!r.t : pol ? r.p.indexOf(pol) !== -1 : true; }).length;
+    var nDecl = list.filter(function (r) { return r.p.length; }).length, nTrack = list.filter(function (r) { return r.t; }).length;
     $("count").innerHTML = "<strong>" + list.length.toLocaleString("ja-JP") + "</strong> 社" +
       (pol === "cand" ? "(予備軍)" + (list.length !== all ? "(全" + all + "社中)" : "")
+        : pol === "track" ? "(宣言はないが減配せず増配を続けている会社)" + (list.length !== all ? "(全" + all + "社中)" : "")
         : pol ? "(" + pol + "を宣言" + (list.length !== all ? "・全" + all + "社中" : "") + ")"
-        : "(宣言済み " + nDecl.toLocaleString("ja-JP") + "社・予備軍 " + (list.length - nDecl).toLocaleString("ja-JP") + "社" + (list.length !== all ? "・全" + all + "社中" : "") + ")") +
+        : "(宣言済み " + nDecl.toLocaleString("ja-JP") + "社・予備軍 " + (list.length - nDecl - nTrack).toLocaleString("ja-JP") + "社・実績 " + nTrack.toLocaleString("ja-JP") + "社" + (list.length !== all ? "・全" + all + "社中" : "") + ")") +
       (pol === "cand" ? '<br><small>★★ ' + list.filter(function (r) { return r.st === 2; }).length + '社 ・ ★ ' +
         list.filter(function (r) { return r.st === 1; }).length + '社</small>' : "");
     var ul = $("list");
