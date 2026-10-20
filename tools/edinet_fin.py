@@ -733,13 +733,9 @@ def track_record(ds, payout):
 
 
 def track_text(ds, po):
-    nc, up0 = nocut_years(ds), streak_of(ds)
-    more = "以上" if nc == len(ds) - 1 else ""
-    txt = ("%d期%s連続増配" % (up0, "以上" if up0 == len(ds) - 1 else "")) if up0 >= 3 else ("%d年%s減配なし" % (nc, more))
-    # 増配が止まった年が据え置きなら、減配していない年数も添える(ひろぎん: 4期連続増配・5年以上減配なし)
-    if up0 >= 3 and nc > up0:
-        txt += "・%d年%s減配なし" % (nc, more)
-    return "%s・配当性向%d%%" % (txt, round(po))
+    """一覧の「実績」の印に添える文。連続増配と配当性向は行の数字に出ているので、減配していない年数だけ"""
+    nc = nocut_years(ds)
+    return "%d年%s減配なし" % (nc, "以上" if nc == len(ds) - 1 else "")
 
 
 def write_policy(fin):
