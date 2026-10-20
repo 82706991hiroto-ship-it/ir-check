@@ -787,7 +787,8 @@ def write_policy(fin):
                 rows[-1]["upm"] = 1
             # 1年・5年・10年の増配率(年平均)。長期の記録があればそれを使う。
             # 5年分(6期)ない会社は、5期(4年)の年平均で代わりにし、年数を g5y に残す
-            series = r.get("dlo") or (r.get("dl") if r.get("dl") and len(r["dl"]) > len(d) else d)
+            # 増配率も連続増配と同じ系列で(決算期間の例外を直した dlc があればそれ。HAITO の comparableDivs と同じ)
+            series = r.get("dlc") or r.get("dlo") or (r.get("dl") if r.get("dl") and len(r["dl"]) > len(d) else d)
             def cagr(n):
                 if len(series) > n and series[-1 - n] > 0 and series[-1] > 0:
                     return round((series[-1] / series[-1 - n]) ** (1 / n) - 1, 4)
