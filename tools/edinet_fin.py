@@ -617,7 +617,12 @@ def attach_long(fin, haito_html):
                 continue
             long = list(reversed(v[3]))
             if close(long[-1], d[-1]):
-                pass
+                # 当期は同じなのに古い期が HAITO と違う: 有報の5期分が分割前の実額のまま(会社が修正していない)か、
+                # 分割の年の「分割前の中間＋分割後の期末」を倍率で割っただけ。HAITO は株数の変化から割り戻して確かめてあるので、そちらを使う
+                adj = [round(x, 2) for x in long[-len(d):]] if len(long) >= len(d) else None
+                if adj and any(not close(a, b) for a, b in zip(adj, d)) and all(
+                        close(a, b) or (a > 0 and 1 / 6 <= b / a <= 6) for a, b in zip(adj, d)):
+                    r["div_raw"], r["div"] = d, adj
             elif len(d) >= 2 and close(long[-1], d[-2]):
                 long = long + [d[-1]]
             elif hstate.get(code, "")[:7] == (r.get("fy") or "")[:7] and len(long) >= len(d):
