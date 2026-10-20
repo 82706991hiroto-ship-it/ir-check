@@ -1799,9 +1799,21 @@
     // HAITOとこの端末で登録した株式分割(まだ有報のデータに入っていないもの)は、1株あたりの値を割り戻す
     return Promise.all([finCache[head], irregularPeriods()]).then(function (res) {
       var r = res[0][code] || null;
+      if (r) r = fillDivFromLong(r);
       if (r && window.HaitoSplits) r = window.HaitoSplits.adjustFin(code, r);
       return r ? dropIrregular(code, r, res[1]) : r;
     });
+  }
+  // 有報の5期分の1株配当(div)は、期の途中の株式分割などで古い期を外して短いことがある(東テク: 2期だけ)。
+  // 長期の記録(dl。分割で割り戻し済み)の直近が div と同じなら、1株利益と同じ期数だけ dl から埋める(配当性向のグラフ・判定に使う)
+  function fillDivFromLong(rec) {
+    var d = rec.div || [], e = rec.eps || [], l = rec.dl || [];
+    if (!(d.length < e.length) || l.length < e.length || !d.length) return rec;
+    var tail = l.slice(-d.length);
+    if (tail.some(function (v, i) { return Math.abs(v - d[i]) > 0.011; })) return rec;
+    var out = Object.assign({}, rec);
+    out.div = l.slice(-e.length);
+    return out;
   }
   // 決算期間が12か月でない期(持株会社を作った最初の期・決算期の変更)。HAITOが EDINET の書類一覧から作る
   var irrCache = null;

@@ -700,6 +700,10 @@ def write_policy(fin):
     for m in fin.values():
         for code, r in m.items():
             d, e = r.get("div") or [], r.get("eps") or []
+            # 有報の5期分が分割などで短いときは、長期の記録(割り戻し済み)の直近が同じなら1株利益の期数まで埋める
+            lg = r.get("dl") or []
+            if d and len(d) < len(e) <= len(lg) and all(abs(a - b) <= 0.011 for a, b in zip(lg[-len(d):], d)):
+                d = lg[-len(e):]
             ds = r.get("dlo") or r.get("dl") or d  # 記念・特別配当を除いた普通配当で数える
             po = round(d[-1] / e[-1] * 100, 1) if d and e and e[-1] > 0 else None
             if r.get("pol"):
