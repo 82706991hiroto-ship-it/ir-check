@@ -1008,6 +1008,7 @@
     var dLong = rec.dlo || (rec.dl && rec.dl.length > (rec.div || []).length ? rec.dl : rec.div);
     ev.dividend = dLong ? Object.assign(dividendOf(dLong) || {}, { series: dLong }) : null;
     if (ev.dividend && rec.sp) ev.dividend.reason += "(記念・特別配当を除いて判定: " + specialText(rec.sp) + ")";
+    if (ev.dividend && rec.irrNote) ev.dividend.reason += "(決算期間が12か月でない " + rec.irrNote + " は除いて判定)";
     // 有報の配当性向は個別(親会社単体)の表にしか載らないことが多い。一般に使う連結の
     // 配当性向に合わせるため、1株配当 ÷ 連結EPS で出す。EPSが無ければ有報の値を使う
     var dLast = lastOf(rec.div), eLast = lastOf(rec.eps);
@@ -1794,7 +1795,38 @@
         .catch(function () { return {}; });
     }
     // HAITOとこの端末で登録した株式分割(まだ有報のデータに入っていないもの)は、1株あたりの値を割り戻す
-    return finCache[head].then(function (m) { var r = m[code] || null; return r && window.HaitoSplits ? window.HaitoSplits.adjustFin(code, r) : r; });
+    return Promise.all([finCache[head], irregularPeriods()]).then(function (res) {
+      var r = res[0][code] || null;
+      if (r && window.HaitoSplits) r = window.HaitoSplits.adjustFin(code, r);
+      return r ? dropIrregular(code, r, res[1]) : r;
+    });
+  }
+  // 決算期間が12か月でない期(持株会社を作った最初の期・決算期の変更)。HAITOが EDINET の書類一覧から作る
+  var irrCache = null;
+  function irregularPeriods() {
+    if (!irrCache) irrCache = fetch("../haito-dashboard/data/irregular-periods.json").then(function (r) { return r.ok ? r.json() : {}; }).catch(function () { return {}; });
+    return irrCache;
+  }
+  // その期の1株配当は長さのぶん少なく(多く)なるので、増配・減配・連続増配の判定に使う系列(dlo)から外す。値は変えない
+  function dropIrregular(code, rec, all) {
+    var e = all && all[code];
+    if (!e || !rec.fy) return rec;
+    function mi(d) { return parseInt(d.slice(0, 4), 10) * 12 + parseInt(d.slice(5, 7), 10); }
+    var ends = (e.periods || []).filter(function (p) { return p <= rec.fy; });
+    if (!ends.length) return rec;
+    var newer = Math.round((mi(rec.fy) - mi(ends[0])) / 12), drop = [], notes = [];
+    (e.irregular || []).forEach(function (x) {
+      var i = ends.indexOf(x.end);
+      if (x.end > rec.fy || i === -1) return;
+      drop.push(newer + i);
+      notes.push(x.end.slice(0, 4) + "年" + parseInt(x.end.slice(5, 7), 10) + "月期(" + Math.round(x.months) + "か月)");
+    });
+    var base = rec.dlo || (rec.dl && rec.dl.length > (rec.div || []).length ? rec.dl : rec.div);
+    if (!drop.length || !base) return rec;
+    var out = Object.assign({}, rec), n = base.length;
+    out.dlo = base.filter(function (v, k) { return drop.indexOf(n - 1 - k) === -1; });
+    out.irrNote = notes.join("・");
+    return out;
   }
 
   function pbrFrom(price, bps) {
