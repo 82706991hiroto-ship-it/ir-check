@@ -2549,16 +2549,19 @@
     return li;
   }
 
+  var checkedAll = 0;
   function render() {
     var list = filtered();
     // 全体の社数は、宣言済みと予備軍を分けて数える
     var all = rows.filter(function (r) { return pol === "cand" ? !r.p.length && !!r.k : pol === "track" ? !!r.t : pol ? r.p.indexOf(pol) !== -1 : true; }).length;
     var nDecl = list.filter(function (r) { return r.p.length; }).length, nTrack = list.filter(function (r) { return r.t; }).length;
     $("count").innerHTML = "<strong>" + list.length.toLocaleString("ja-JP") + "</strong> 社" +
-      (pol === "cand" ? "(予備軍)" + (list.length !== all ? "(全" + all + "社中)" : "")
-        : pol === "track" ? "(宣言はないが減配せず増配を続けている会社)" + (list.length !== all ? "(全" + all + "社中)" : "")
-        : pol ? "(" + pol + "を宣言" + (list.length !== all ? "・全" + all + "社中" : "") + ")"
-        : "(宣言済み " + nDecl.toLocaleString("ja-JP") + "社・予備軍 " + (list.length - nDecl - nTrack).toLocaleString("ja-JP") + "社・実績 " + nTrack.toLocaleString("ja-JP") + "社" + (list.length !== all ? "・全" + all + "社中" : "") + ")") +
+      // 「全○社」は上場会社の数ではなく、このタブに載っている会社の数。絞り込んだときだけ添える
+      (pol === "cand" ? "(予備軍" + (list.length !== all ? "・絞り込む前は" + all + "社" : "") + ")"
+        : pol === "track" ? "(宣言はないが減配せず増配を続けている会社" + (list.length !== all ? "・絞り込む前は" + all + "社" : "") + ")"
+        : pol ? "(" + pol + "を宣言" + (list.length !== all ? "・絞り込む前は" + all + "社" : "") + ")"
+        : "(宣言済み " + nDecl.toLocaleString("ja-JP") + "社・予備軍 " + (list.length - nDecl - nTrack).toLocaleString("ja-JP") + "社・実績 " + nTrack.toLocaleString("ja-JP") + "社" + (list.length !== all ? "・絞り込む前は" + all.toLocaleString("ja-JP") + "社" : "") + ")") +
+      (checkedAll ? '<br><small>有報を読んだ上場会社 ' + checkedAll.toLocaleString("ja-JP") + '社のうち、宣言済み・予備軍・実績に当てはまる ' + rows.length.toLocaleString("ja-JP") + '社だけを載せています</small>' : "") +
       (pol === "cand" ? '<br><small>★★ ' + list.filter(function (r) { return r.st === 2; }).length + '社 ・ ★ ' +
         list.filter(function (r) { return r.st === 1; }).length + '社 ・ うち実績あり ' + list.filter(function (r) { return r.tr; }).length + '社</small>'
         : pol === "track" ? '<br><small>予備軍のサインもある会社(' + rows.filter(function (r) { return r.tr; }).length + '社)は「予備軍」に「実績あり」の印で出ます</small>' : "");
@@ -2743,6 +2746,7 @@
     loaded = true;
   fetch("policy.json").then(function (r) { return r.json(); }).then(function (data) {
     rows = data.rows || [];
+    checkedAll = data.checked || 0;
     var secs = {};
     rows.forEach(function (r) { if (r.s) secs[r.s] = (secs[r.s] || 0) + 1; });
     Object.keys(secs).sort(function (a, b) { return secs[b] - secs[a]; }).forEach(function (s) {
