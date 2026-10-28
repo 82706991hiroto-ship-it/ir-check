@@ -2051,7 +2051,7 @@
     var pf = perkNow && perkNow.code === code ? perkNow.f : null;
     if (Array.isArray(pf) && pf.length && yMain !== null) {
       var pk = pf[0][1] / (pf[0][0] * price) * 100;
-      tiles.push('<div class="yt"><small>優待込み(総合)</small><b>' + (yMain + pk).toFixed(2) + '%</b><em>' + pf[0][0].toLocaleString("ja-JP") + '株で優待 ' + pk.toFixed(2) + '%</em></div>');
+      tiles.push('<div class="yt"><small>優待込み(総合)</small><b>' + (yMain + pk).toFixed(2) + '%</b><em title="' + pf[0][0].toLocaleString("ja-JP") + '株で優待をもらうとき">うち優待 ' + pk.toFixed(2) + '%(' + pf[0][0].toLocaleString("ja-JP") + '株)</em></div>');
     }
     // PER: 会社予想 ・ 前期の実績(赤字は ―)
     var per = [];
