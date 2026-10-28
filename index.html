@@ -558,7 +558,7 @@
       <b>⑥増配を目指すと明記</b>・<b>導入を検討中</b>(これだけで★★): 有報の配当政策にそう書いている。</p>
     <p><span class="note-label">反映の時期</span>有報は年1回、決算から約3か月後に出ます。決算短信や中期経営計画で新しく宣言した会社は、次の有報が出るまでここに載りません。
       数字は毎週、新しく提出された有報で更新しています(<span id="built"></span>)。</p>
-    <p><span class="note-label">株価</span>「株価・予想を見る」で開いたYahoo!ファイナンスの参考指標の欄(色の付いた所)をまとめてコピーして戻ると、株価と予想配当が入ります。株価だけのコピーでもかまいません。入れた値はこの端末に保存し、チェックシートでも使います。</p>
+    <p><span class="note-label">株価</span>「株価・予想を見る」で開いたYahoo!ファイナンスの参考指標の欄の色の付いた所(「配当利回り」から「BPS」まで)をコピーして戻ると、株価と予想配当が入ります。株価だけのコピーでもかまいません。入れた値はこの端末に保存し、チェックシートでも使います。</p>
     <p><span class="note-label">出典</span><a href="https://disclosure2.edinet-fsa.go.jp/" target="_blank" rel="noopener noreferrer">EDINET</a>の有価証券報告書をもとに当サイトが加工して作成しています
       (<a href="https://www.digital.go.jp/resources/open_data/public_data_license_v1.0" target="_blank" rel="noopener noreferrer">公共データ利用規約 第1.0版</a>)。
       1株配当は株式分割を割り戻しています。特定の銘柄の売買を勧めるものではありません。投資判断は自己責任で行ってください。</p>
@@ -1928,7 +1928,8 @@
     return m ? m[0] : "";
   }
   // Yahoo!ファイナンスの「参考指標」をまとめてコピーした文字から、会社予想の1株配当・EPSと株価を読む。
-  // 株価は 最低購入代金 ÷ 単元株数(無ければ 1株配当 ÷ 配当利回り で近似)
+  // 株価は PER(会社予想) × EPS(会社予想)。PERはその時刻の株価で出ているので、画面上の株価とほぼ同じになる
+  // (最低購入代金は少し前の株価のことがある)。PERが出ない(赤字など)ときは 最低購入代金 ÷ 単元株数、それも無ければ 1株配当 ÷ 配当利回り
   function parseQuoteBlock(t) {
     var s = String(t || "").normalize("NFKC").replace(/\s+/g, " ");
     function after(re) { var m = s.match(re); return m ? parseFloat(m[1].replace(/,/g, "")) : NaN; }
@@ -1936,9 +1937,12 @@
     var yld = after(/配当利回り\s*\(会社予想\)[^0-9-]{0,40}?([0-9][0-9,]*(?:\.[0-9]+)?)\s*%/);
     var feps = after(/EPS\s*\(会社予想\)[^0-9-]{0,40}?(-?[0-9][0-9,]*(?:\.[0-9]+)?)/);
     var fsp = after(/(?:記念|特別)配当[^0-9]{0,12}?([0-9][0-9,]*(?:\.[0-9]+)?)\s*円/);
+    var fper = after(/PER\s*\(会社予想\)[^0-9-]{0,40}?([0-9][0-9,]*(?:\.[0-9]+)?)\s*倍/);
     var minBuy = after(/最低購入代金[^0-9]*?([0-9][0-9,]*)/), unit = after(/単元株数[^0-9]*?([0-9][0-9,]*)/);
-    var exact = minBuy > 0 && unit > 0;
-    var price = exact ? minBuy / unit : fdiv > 0 && yld > 0 ? fdiv / (yld / 100) : NaN;
+    var byPer = fper > 0 && feps > 0, exact = byPer || (minBuy > 0 && unit > 0);
+    var price = byPer ? fper * feps : minBuy > 0 && unit > 0 ? minBuy / unit : fdiv > 0 && yld > 0 ? fdiv / (yld / 100) : NaN;
+    // PER×EPSは小数の丸めで±0.05%ほどずれるので、1,000円以上は円単位に丸める
+    if (byPer) price = price >= 1000 ? Math.round(price) : Math.round(price * 10) / 10;
     if (!(fdiv > 0) && !(price > 0) && isNaN(feps)) return null;
     return { price: price > 0 ? Math.round(price * 10) / 10 : NaN, approx: !exact, fdiv: fdiv, feps: feps, fsp: fsp };
   }
@@ -1971,9 +1975,9 @@
     if (!(price > 0) || isNaN(fe)) return "";
     return fe > 0 ? "<br>予想PER <b>" + (price / fe).toFixed(1) + "倍</b>(株価 ÷ 会社予想の1株利益 " + fe + "円)" : "<br>予想PER <b>―</b>(会社予想は赤字)";
   }
-  // 開いたときに「参考指標」の欄まで送り、単元株数までを色付けする(Safari・Chromeのテキストフラグメント)
+  // 開いたときに参考指標の欄の配当利回りまで送り、BPSまで(1画面に収まる範囲)を色付けする(Safari・Chromeのテキストフラグメント)
   function yahooUrl(code) {
-    return "https://finance.yahoo.co.jp/quote/" + encodeURIComponent(code) + ".T#:~:text=" + encodeURIComponent("参考指標") + "," + encodeURIComponent("単元株数");
+    return "https://finance.yahoo.co.jp/quote/" + encodeURIComponent(code) + ".T#:~:text=" + encodeURIComponent("配当利回り") + "," + encodeURIComponent("BPS");
   }
   window.irYahooUrl = yahooUrl;
   // 株主優待の有無。HAITO(同じサイト)が有報の「株主に対する特典」から作った表を読む
@@ -2131,7 +2135,7 @@
         var blk = t && t.length > 40 ? parseQuoteBlock(t) : null;
         if (blk) { applyQuoteBlock(blk); return; }
         // 長い文字なのに参考指標として読めないときは、最初の数字(時価総額など)を株価にしない
-        if (t && t.length > 40) { setStatus("コピーした内容から株価・予想配当を読み取れませんでした(" + t.length + "文字)。参考指標の見出しから単元株数までを選んでコピーし直してください。"); return; }
+        if (t && t.length > 40) { setStatus("コピーした内容から株価・予想配当を読み取れませんでした(" + t.length + "文字)。「配当利回り」から「BPS」まで(色の付いた所)を選んでコピーし直してください。"); return; }
         var p = parsePrice(t);
         if (p) setPrice(p); else { input.focus(); setStatus("コピーした内容に株価が見つかりませんでした。"); }
       }, function () { input.focus(); setStatus("株価の欄を長押しして貼り付けてください。"); });
@@ -2789,7 +2793,7 @@
       navigator.clipboard.readText().then(function (t) {
         var b = quoteOf(t);
         if (b) { applyQuote(row, b); return; }
-        if (t && t.length > 40) { toast("コピーした内容から株価・予想配当を読み取れませんでした。参考指標の見出しから単元株数までをコピーし直してください"); return; }
+        if (t && t.length > 40) { toast("コピーした内容から株価・予想配当を読み取れませんでした。「配当利回り」から「BPS」まで(色の付いた所)をコピーし直してください"); return; }
         if (parsePrice(t)) { applyPrice(row, t); row.classList.remove("is-waiting"); try { sessionStorage.removeItem(WAIT_KEY); } catch (x) {} }
         else input.focus();
       }, function () { input.focus(); });
