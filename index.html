@@ -2040,6 +2040,17 @@
       (per.length ? (y.length ? "<br>" : "") + "PER " + per.join(" ・ ") : "") +
       (div > 0 && !(fdiv > 0) ? '<br><small>Yahoo!などは会社予想の利回りです。予想配当を入れると同じ値になります。</small>' : "");
   }
+  // 「探す」で入れた株価・予想配当(irPrices)が、チェック中の銘柄の値より新しければ取り込む。
+  // 同じ銘柄を先にチェックで開き、あとから「探す」で株価を貼ったときも、10項目(PBR・利回り)に反映させる
+  function syncStoredQuote() {
+    var code = curCode(), kp = code ? loadPrices()[code] : null;
+    if (!kp) return;
+    if (kp.p > 0 && parseFloat(state.subject.price) !== kp.p) setPrice(String(kp.p));
+    if (kp.f > 0 && parseFloat(state.subject.fdiv) !== kp.f) {
+      var f = document.getElementById("subjFDiv"); f.value = String(kp.f); f.dispatchEvent(new Event("input"));
+    }
+    if (kp.e != null && String(state.subject.feps || "") !== String(kp.e)) { state.subject.feps = String(kp.e); save(); renderPriceTools(); }
+  }
   function setPrice(v) {
     var input = document.getElementById("subjPrice");
     input.value = v;
@@ -2342,6 +2353,7 @@
     var fl = prepareFromCode(code, NaN);
     renderSubject(); renderItems(); renderTally();
     startFromLink(fl);
+    if (!fl) syncStoredQuote();
     setTab("check");
   };
 
@@ -2356,6 +2368,7 @@
     try { sessionStorage.setItem("irTab", t); } catch (e) {}
     try { history.replaceState(null, "", location.pathname + "#" + t); } catch (e) {}
     if (t === "find" && window.irLoadFind) window.irLoadFind();
+    if (t === "check" && changed) syncStoredQuote();
     if (changed && !quiet) {
       window.scrollTo(0, 0);
       document.body.classList.remove("tab-enter"); void document.body.offsetWidth; document.body.classList.add("tab-enter");
