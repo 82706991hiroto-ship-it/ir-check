@@ -1916,24 +1916,24 @@
         var nm = r.item.name.replace(/\(.*?\)/g, "") + (r.item.star ? "★" : "");
         p.txt(p.fit(nm, "700", fs, 230), SX + 62, mid, "700", fs, SC.text);
         p.font("700", fs); var vw2 = p.g.measureText(val).width;
-        // 推移で判定する項目(売上高・EPS・営業CF・現金等・1株配当)は、文の代わりに小さな棒グラフで見せる
-        var rc = k.rec, ser = rc ? { sales: rc.sales, eps: rc.eps, cf: rc.ocf, cash: rc.cash, equity: rc.eq, roe: rc.roe,
-          payout: rc.div && rc.eps ? rc.div.slice(-rc.eps.length).map(function (v, j, arr) { var ee = rc.eps.slice(-arr.length)[j]; return ee > 0 ? v / ee : null; }) : null,
-          dividend: (rc.dlo || (rc.dl && rc.dl.length > (rc.div || []).length ? rc.dl : rc.div) || []).slice(-10) }[r.item.key] : null;
+        // 推移のある項目は、文の代わりにチェックの画面と同じ小さな折れ線(最小〜最大の幅、最新の期に点、0をまたぐときは点線)
+        var ev0 = k.a && k.a.ev[r.item.key], ser = ev0 && ev0.series ? ev0.series.filter(function (v) { return v != null; }) : null;
         var gx = SX + 300, gw = SR - 8 - vw2 - 30 - gx;
-        if (ser && ser.length >= 3 && gw > 120) {
-          ser = ser.filter(function (v) { return v != null; });
-          var hi = Math.max.apply(null, ser.map(Math.abs)) || 1, bh2 = rowH - 18, n2 = ser.length, slot = Math.min((gw - 56) / n2, 34);
-          var hasNeg = ser.some(function (v) { return v < 0; }), zero = hasNeg ? ry + 9 + bh2 * 0.6 : ry + 9 + bh2;
-          // すべてプラスなら、最小値の少し下を棒の根元にして伸び方を見やすくする(0円からだと差が見えない)
-          var lo = hasNeg ? 0 : Math.min.apply(null, ser) * 0.75;
-          ser.forEach(function (v, j) {
-            var hh = Math.max(3, (hasNeg ? Math.abs(v) / hi * bh2 * 0.6 : (v - lo) / ((hi - lo) || 1) * bh2)), bx2 = gx + j * slot + slot * 0.15;
-            // 前の期より減ったら薄い赤(減ると良くない項目だけ。配当性向・自己資本比率は減っても悪いとは限らない)
-            var down = v < 0 || (["equity", "payout"].indexOf(r.item.key) === -1 && j > 0 && v < ser[j - 1] - Math.abs(ser[j - 1]) * 0.005);
-            p.rr(bx2, v < 0 ? zero : zero - hh, slot * 0.7, hh, 3, v < 0 ? SC.bad : down ? "#f2a3a3" : (j === n2 - 1 ? SC.ok : "#9db8f2"));
-          });
-          p.txt(n2 + "期", gx + n2 * slot + 10, mid - 1, "500", 19, SC.sub);
+        if (ser && ser.length >= 2 && gw > 120) {
+          var lw = Math.min(gw - 60, 250), lh = rowH - 16, top0 = ry + 8;
+          var mn = Math.min.apply(null, ser), mx = Math.max.apply(null, ser);
+          if (mx === mn) mx = mn + 1;
+          var yv = function (v) { return top0 + lh - 3 - (v - mn) / (mx - mn) * (lh - 6); };
+          var stp = (lw - 6) / (ser.length - 1), gg = p.g;
+          if (mn < 0 && mx > 0) {
+            gg.save(); gg.strokeStyle = SC.none; gg.setLineDash([5, 5]); gg.lineWidth = 2;
+            gg.beginPath(); gg.moveTo(gx, yv(0)); gg.lineTo(gx + lw, yv(0)); gg.stroke(); gg.restore();
+          }
+          gg.strokeStyle = SC.text; gg.lineWidth = 3.5; gg.lineJoin = "round"; gg.beginPath();
+          ser.forEach(function (v, j) { var xx = gx + 3 + j * stp; if (j) gg.lineTo(xx, yv(v)); else gg.moveTo(xx, yv(v)); });
+          gg.stroke();
+          gg.beginPath(); gg.arc(gx + 3 + (ser.length - 1) * stp, yv(ser[ser.length - 1]), 6, 0, Math.PI * 2); gg.fillStyle = SC.text; gg.fill();
+          p.txt(ser.length + "期", gx + lw + 14, mid - 1, "500", 19, SC.sub);
         } else {
           var e = k.a && k.a.ev[r.item.key], why = e && e.reason ? String(e.reason).split("。")[0] : "";
           var sn = k.a && sectorNote(k.rec && k.rec.sec, r.item.key);
