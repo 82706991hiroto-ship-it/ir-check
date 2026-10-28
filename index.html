@@ -1916,10 +1916,30 @@
         var nm = r.item.name.replace(/\(.*?\)/g, "") + (r.item.star ? "★" : "");
         p.txt(p.fit(nm, "700", fs, 230), SX + 62, mid, "700", fs, SC.text);
         p.font("700", fs); var vw2 = p.g.measureText(val).width;
-        var e = k.a && k.a.ev[r.item.key], why = e && e.reason ? String(e.reason).split("。")[0] : "";
-        var sn = k.a && sectorNote(k.rec && k.rec.sec, r.item.key);
-        if (sn) why = "業種の目安で判定 ・ " + why;
-        p.txt(p.fit(why, "500", 21, SR - 8 - vw2 - 24 - (SX + 300)), SX + 300, mid - 1, "500", 21, SC.sub);
+        // 推移で判定する項目(売上高・EPS・営業CF・現金等・1株配当)は、文の代わりに小さな棒グラフで見せる
+        var rc = k.rec, ser = rc ? { sales: rc.sales, eps: rc.eps, cf: rc.ocf, cash: rc.cash, equity: rc.eq, roe: rc.roe,
+          payout: rc.div && rc.eps ? rc.div.slice(-rc.eps.length).map(function (v, j, arr) { var ee = rc.eps.slice(-arr.length)[j]; return ee > 0 ? v / ee : null; }) : null,
+          dividend: (rc.dlo || (rc.dl && rc.dl.length > (rc.div || []).length ? rc.dl : rc.div) || []).slice(-10) }[r.item.key] : null;
+        var gx = SX + 300, gw = SR - 8 - vw2 - 30 - gx;
+        if (ser && ser.length >= 3 && gw > 120) {
+          ser = ser.filter(function (v) { return v != null; });
+          var hi = Math.max.apply(null, ser.map(Math.abs)) || 1, bh2 = rowH - 18, n2 = ser.length, slot = Math.min((gw - 56) / n2, 34);
+          var hasNeg = ser.some(function (v) { return v < 0; }), zero = hasNeg ? ry + 9 + bh2 * 0.6 : ry + 9 + bh2;
+          // すべてプラスなら、最小値の少し下を棒の根元にして伸び方を見やすくする(0円からだと差が見えない)
+          var lo = hasNeg ? 0 : Math.min.apply(null, ser) * 0.75;
+          ser.forEach(function (v, j) {
+            var hh = Math.max(3, (hasNeg ? Math.abs(v) / hi * bh2 * 0.6 : (v - lo) / ((hi - lo) || 1) * bh2)), bx2 = gx + j * slot + slot * 0.15;
+            // 前の期より減ったら薄い赤(減ると良くない項目だけ。配当性向・自己資本比率は減っても悪いとは限らない)
+            var down = v < 0 || (["equity", "payout"].indexOf(r.item.key) === -1 && j > 0 && v < ser[j - 1] - Math.abs(ser[j - 1]) * 0.005);
+            p.rr(bx2, v < 0 ? zero : zero - hh, slot * 0.7, hh, 3, v < 0 ? SC.bad : down ? "#f2a3a3" : (j === n2 - 1 ? SC.ok : "#9db8f2"));
+          });
+          p.txt(n2 + "期", gx + n2 * slot + 10, mid - 1, "500", 19, SC.sub);
+        } else {
+          var e = k.a && k.a.ev[r.item.key], why = e && e.reason ? String(e.reason).split("。")[0] : "";
+          var sn = k.a && sectorNote(k.rec && k.rec.sec, r.item.key);
+          if (sn) why = "業種の目安で判定 ・ " + why;
+          p.txt(p.fit(why, "500", 21, SR - 8 - vw2 - 24 - gx), gx, mid - 1, "500", 21, SC.sub);
+        }
       } else {
         p.txt(p.fit(r.item.name + (r.item.star ? " ★" : ""), "500", fs, 440), SX + 70, mid, "500", fs, SC.text);
       }
