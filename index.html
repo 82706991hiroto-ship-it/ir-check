@@ -1920,20 +1920,37 @@
         var ev0 = k.a && k.a.ev[r.item.key], ser = ev0 && ev0.series ? ev0.series.filter(function (v) { return v != null; }) : null;
         var gx = SX + 300, gw = SR - 8 - vw2 - 30 - gx;
         if (ser && ser.length >= 2 && gw > 120) {
-          var lw = Math.min(gw - 60, 250), lh = rowH - 16, top0 = ry + 8;
+          // 見やすさ: 判定の色の線＋下を薄く塗る・各期に点・最新の期は大きい点。右に「5期 +34%」(最初の期から最新の期への変化)
+          var lw = Math.min(gw - 110, 220), lh = rowH - 10, top0 = ry + 5, col = SLV[r.level] === SC.none ? SC.sub : SLV[r.level];
           var mn = Math.min.apply(null, ser), mx = Math.max.apply(null, ser);
           if (mx === mn) mx = mn + 1;
-          var yv = function (v) { return top0 + lh - 3 - (v - mn) / (mx - mn) * (lh - 6); };
-          var stp = (lw - 6) / (ser.length - 1), gg = p.g;
+          var yv = function (v) { return top0 + lh - 4 - (v - mn) / (mx - mn) * (lh - 8); };
+          var stp = (lw - 8) / (ser.length - 1), gg = p.g, xs = ser.map(function (v, j) { return gx + 4 + j * stp; });
+          gg.beginPath(); gg.moveTo(xs[0], top0 + lh);
+          ser.forEach(function (v, j) { gg.lineTo(xs[j], yv(v)); });
+          gg.lineTo(xs[xs.length - 1], top0 + lh); gg.closePath();
+          gg.save(); gg.globalAlpha = 0.14; gg.fillStyle = col; gg.fill(); gg.restore();
           if (mn < 0 && mx > 0) {
-            gg.save(); gg.strokeStyle = SC.none; gg.setLineDash([5, 5]); gg.lineWidth = 2;
+            gg.save(); gg.strokeStyle = SC.bad; gg.setLineDash([5, 5]); gg.lineWidth = 2;
             gg.beginPath(); gg.moveTo(gx, yv(0)); gg.lineTo(gx + lw, yv(0)); gg.stroke(); gg.restore();
           }
-          gg.strokeStyle = SC.text; gg.lineWidth = 3.5; gg.lineJoin = "round"; gg.beginPath();
-          ser.forEach(function (v, j) { var xx = gx + 3 + j * stp; if (j) gg.lineTo(xx, yv(v)); else gg.moveTo(xx, yv(v)); });
+          gg.strokeStyle = col; gg.lineWidth = 4; gg.lineJoin = "round"; gg.lineCap = "round"; gg.beginPath();
+          ser.forEach(function (v, j) { if (j) gg.lineTo(xs[j], yv(v)); else gg.moveTo(xs[j], yv(v)); });
           gg.stroke();
-          gg.beginPath(); gg.arc(gx + 3 + (ser.length - 1) * stp, yv(ser[ser.length - 1]), 6, 0, Math.PI * 2); gg.fillStyle = SC.text; gg.fill();
-          p.txt(ser.length + "期", gx + lw + 14, mid - 1, "500", 19, SC.sub);
+          ser.forEach(function (v, j) {
+            var last = j === ser.length - 1;
+            gg.beginPath(); gg.arc(xs[j], yv(v), last ? 7 : (ser.length > 8 ? 0 : 4), 0, Math.PI * 2); gg.fillStyle = v < 0 ? SC.bad : col; gg.fill();
+          });
+          // 比率の項目(自己資本比率・ROE)は「ポイント」の差、金額の項目は最初の期からの増減率
+          var f0 = ser[0], f1 = ser[ser.length - 1], isRatio = r.item.key === "equity" || r.item.key === "roe";
+          var chg = isRatio ? (f1 - f0) * 100 : f0 > 0 && f1 > 0 ? (f1 / f0 - 1) * 100 : null;
+          var pl = ser.length + "期";
+          p.txt(pl, gx + lw + 12, mid - 1, "500", 19, SC.sub);
+          if (chg !== null) {
+            p.font("500", 19); var plw = p.g.measureText(pl).width;
+            var ct = Math.abs(chg) < 0.5 ? "±0" + (isRatio ? "pt" : "%") : (chg > 0 ? "+" : "−") + Math.abs(chg).toFixed(isRatio ? 1 : 0) + (isRatio ? "pt" : "%");
+            p.txt(ct, gx + lw + 12 + plw + 8, mid - 1, "700", 21, Math.abs(chg) < 0.5 ? SC.sub : chg > 0 ? SC.good : SC.bad);
+          }
         } else {
           var e = k.a && k.a.ev[r.item.key], why = e && e.reason ? String(e.reason).split("。")[0] : "";
           var sn = k.a && sectorNote(k.rec && k.rec.sec, r.item.key);
