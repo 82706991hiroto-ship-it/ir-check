@@ -630,7 +630,7 @@
   <dialog class="share-dialog" id="shareDialog">
     <h3>SNS用の画像</h3>
     <p class="hint">採点の結果をそのまま載せられる画像です。</p>
-    <div class="share-modes" id="shareModes"><button type="button" class="on" data-mode="one">1枚(まとめ)</button><button type="button" data-mode="full">詳しく(複数枚)</button></div>
+    <div class="share-modes" id="shareModes"><button type="button" class="on" data-mode="one">1枚(まとめ)</button><button type="button" data-mode="full">詳しく(2枚)</button></div>
     <label class="share-opt"><input type="checkbox" id="shareHidePrice"> 株価と利回りを載せない</label>
     <div class="share-previews" id="sharePreviews"></div>
     <p class="hint" id="shareText"></p>
@@ -1805,8 +1805,9 @@
 
 
   // ---------- SNS用の画像 ----------
-  // 採点の結果を画像にする。「1枚」はまとめだけ(1080×1640)。「詳しく」は 1080×1350 の4枚まで(X は1回に4枚まで):
-  // まとめ＋総合・配当方針・優待 / 10項目の根拠(1〜2枚) / 配当と利益の推移。色はダークモードに関係なく明るい配色で固定
+  // 採点の結果を画像にする。「1枚」はまとめだけ(1080×1640)。「詳しく」は 1080×1350 の2枚:
+  // 1枚目 判定・利回り・10項目(値と根拠の一文) / 2枚目 1株配当と配当性向・1株利益の推移＋総合・配当方針・優待。
+  // (根拠を全文で出す drawReasons と、まとめに総合を入れる withNotes は今は使っていない)色はダークモードに関係なく明るい配色で固定
   var SHARE_URL = "82706991hiroto-ship-it.github.io/ir-check";
   var shareBlobs = [], shareMode = "one";
   var SC = { page: "#f6f7fb", card: "#ffffff", text: "#23282e", sub: "#5f6b7a", line: "#e5e8ef", field: "#f3f5f9", stripe: "#f8f9fc",
@@ -1863,13 +1864,13 @@
   }
   function fyText(fy) { return fy ? String(fy).replace(/^(\d{4})-(\d{2}).*$/, function (_, y, m) { return y + "年" + (+m) + "月期"; }) : ""; }
   // 1枚目: まとめ。rowH: 10項目の行の高さ。withChart: 1株配当の推移も入れる(1枚だけのとき)
-  function drawSummary(H, rowH, withChart, withNotes) {
+  function drawSummary(H, rowH, withChart, withNotes, withWhy) {
     var p = sharePage(H), k = shareCtx(), s = k.s, a = k.a, rec = k.rec, code = k.code;
     shareHead(p, "");
     var fyT = fyText(a && a.fy);
     if (rec && rec.sec) p.txt(rec.sec + (fyT ? " ・ " + fyT + "の有価証券報告書で採点" : ""), SX, 258, "500", 26, SC.sub);
     var verdict = s.counts.bad > 0 ? ["基準を外れた項目 " + s.counts.bad, SC.bad, SC.badSoft] : s.starPassing === s.starTotal && s.starTotal > 0 ? ["基準内", SC.good, SC.goodSoft] : ["要確認", SC.mid, SC.midSoft];
-    var y = 300;
+    var y = 290;
     p.rr(SX, y, SR - SX, 150, 24, SC.field);
     p.font("700", 30); var vw = p.g.measureText(verdict[0]).width + 48;
     p.rr(SX + 28, y + 28, vw, 52, 26, verdict[2]); p.txt(verdict[0], SX + 28 + vw / 2, y + 65, "700", 30, verdict[1], "center");
@@ -1908,8 +1909,20 @@
       if (i % 2 === 0) p.rr(SX - 12, ry + 4, SR - SX + 24, rowH - 4, 12, SC.stripe);
       var mid = ry + rowH / 2 + 11;
       p.txt(SMK[r.level], SX + 8, mid, "700", fs + 6, SLV[r.level]);
-      p.txt(p.fit(r.item.name + (r.item.star ? " ★" : ""), "500", fs, 440), SX + 70, mid, "500", fs, SC.text);
-      p.txt(p.fit(labelOf(r.item, r.value) || "—", "700", fs, SR - SX - 540), SR - 8, mid, "700", fs, r.level === "none" ? SC.none : SC.text, "right");
+      var val = p.fit(labelOf(r.item, r.value) || "—", "700", fs, 230);
+      p.txt(val, SR - 8, mid, "700", fs, r.level === "none" ? SC.none : SC.text, "right");
+      if (withWhy) {
+        // 名前を短く(かっこの中を外す)して、根拠の最初の一文を間に小さく入れる
+        var nm = r.item.name.replace(/\(.*?\)/g, "") + (r.item.star ? "★" : "");
+        p.txt(p.fit(nm, "700", fs, 230), SX + 62, mid, "700", fs, SC.text);
+        p.font("700", fs); var vw2 = p.g.measureText(val).width;
+        var e = k.a && k.a.ev[r.item.key], why = e && e.reason ? String(e.reason).split("。")[0] : "";
+        var sn = k.a && sectorNote(k.rec && k.rec.sec, r.item.key);
+        if (sn) why = "業種の目安で判定 ・ " + why;
+        p.txt(p.fit(why, "500", 21, SR - 8 - vw2 - 24 - (SX + 300)), SX + 300, mid - 1, "500", 21, SC.sub);
+      } else {
+        p.txt(p.fit(r.item.name + (r.item.star ? " ★" : ""), "500", fs, 440), SX + 70, mid, "500", fs, SC.text);
+      }
     });
     y += s.results.length * rowH + 30;
     if (withChart) {
@@ -1952,16 +1965,17 @@
     return pages;
   }
   // 配当と利益の推移: 1株配当(最大14期、減った期は赤・会社予想は薄く)と、配当性向・1株利益(5期)
-  function drawTrends() {
+  function drawTrends(compact) {
     var k = shareCtx(), rec = k.rec;
     if (!rec || !rec.div || !rec.fy) return [];
-    var p = sharePage(1350), y = shareHead(p, "配当と利益の推移") + 40;
+    var p = sharePage(1350), y = shareHead(p, compact ? "推移と配当方針" : "配当と利益の推移") + 40;
+    var CH1 = compact ? 200 : 330, CH2 = compact ? 175 : 300;
     var ds = rec.dl && rec.dl.length > rec.div.length ? rec.dl : rec.div, fd = parseFloat(state.subject.fdiv);
     var labels = fyLabels(rec.fy, ds.length), vals = ds.slice();
     if (fd > 0) { vals.push(fd); labels.push(shiftFy(rec.fy, 1).slice(2, 4) + "/" + (+rec.fy.slice(5, 7)) + "予"); }
     p.txt("1株配当(円)", SX, y, "700", 30, SC.text);
     p.txt("赤は前の期より減った期" + (fd > 0 ? "・薄い棒は会社予想" : ""), SR, y, "500", 22, SC.sub, "right");
-    var top = Math.max.apply(null, vals) || 1, ch = 330, bw = (SR - SX) / vals.length, base = y + 40 + ch;
+    var top = Math.max.apply(null, vals) || 1, ch = CH1, bw = (SR - SX) / vals.length, base = y + 40 + ch;
     vals.forEach(function (v, i) {
       var h1 = Math.max(3, v / top * (ch - 40)), bx = SX + i * bw + bw * 0.16, fc = fd > 0 && i === vals.length - 1;
       var down = i > 0 && v < vals[i - 1] - 0.005;
@@ -1969,54 +1983,64 @@
       if (i === vals.length - 1 || i === 0 || vals.length <= 8) p.txt(String(v), bx + bw * 0.34, base - h1 - 10, "700", 20, SC.text, "center");
       if (vals.length <= 10 || i % 2 === (vals.length - 1) % 2) p.txt(labels[i], bx + bw * 0.34, base + 30, "500", 19, SC.sub, "center");
     });
-    y = base + 90;
+    y = base + (compact ? 76 : 90);
     var e = rec.eps || [], d5 = rec.div.slice(-e.length), n = Math.min(e.length, d5.length);
     if (n >= 2) {
       e = e.slice(-n); d5 = d5.slice(-n);
       var po = d5.map(function (v, i) { return e[i] > 0 ? v / e[i] * 100 : 0; }), lab = fyLabels(rec.fy, n);
       p.txt("配当性向(%)と1株利益(円)", SX, y, "700", 30, SC.text);
       p.txt("棒=配当性向 ・ 点=1株利益", SR, y, "500", 22, SC.sub, "right");
-      var ch2 = 300, base2 = y + 40 + ch2, bw2 = (SR - SX) / n, pTop = Math.max(60, Math.max.apply(null, po)), eTop = Math.max.apply(null, e.map(function (v) { return Math.abs(v); })) || 1;
+      var ch2 = CH2, base2 = y + 40 + ch2, bw2 = (SR - SX) / n, pTop = Math.max(60, Math.max.apply(null, po)), eTop = Math.max.apply(null, e.map(function (v) { return Math.abs(v); })) || 1;
+      // 棒(配当性向)は下の段、点(1株利益)は上の段に分けて、数字が重ならないようにする
+      var barZone = (ch2 - 60) * 0.55, lineTop = base2 - ch2 + 30, lineBot = base2 - barZone - 56;
+      // 1株利益は伸び方が見えるよう、5期の最小〜最大の幅で描く(0円からではない)
+      var eLo = Math.min.apply(null, e.map(function (v) { return Math.max(0, v); })) * 0.8, eHi = Math.max.apply(null, e) || 1;
+      function epsY(v) { return lineBot - (Math.max(0, v) - eLo) / ((eHi - eLo) || 1) * (lineBot - lineTop); }
       po.forEach(function (v, i) {
-        var h1 = Math.max(3, v / pTop * (ch2 - 60)), bx = SX + i * bw2 + bw2 * 0.22;
+        var h1 = Math.max(3, v / pTop * barZone), bx = SX + i * bw2 + bw2 * 0.22;
         p.rr(bx, base2 - h1, bw2 * 0.56, h1, 6, v >= 70 ? SC.bad : v >= 50 ? SC.mid : SC.ok);
         p.txt(v.toFixed(0) + "%", bx + bw2 * 0.28, base2 - h1 - 12, "700", 22, SC.text, "center");
         p.txt(lab[i], bx + bw2 * 0.28, base2 + 30, "500", 20, SC.sub, "center");
       });
       var g = p.g; g.strokeStyle = SC.text; g.lineWidth = 4; g.beginPath();
-      e.forEach(function (v, i) { var px = SX + i * bw2 + bw2 / 2, py = base2 - Math.max(0, v) / eTop * (ch2 - 60) - 10; if (i) g.lineTo(px, py); else g.moveTo(px, py); });
+      e.forEach(function (v, i) { var px = SX + i * bw2 + bw2 / 2, py = epsY(v); if (i) g.lineTo(px, py); else g.moveTo(px, py); });
       g.stroke();
       e.forEach(function (v, i) {
-        var px = SX + i * bw2 + bw2 / 2, py = base2 - Math.max(0, v) / eTop * (ch2 - 60) - 10;
+        var px = SX + i * bw2 + bw2 / 2, py = epsY(v);
         g.beginPath(); g.arc(px, py, 9, 0, Math.PI * 2); g.fillStyle = SC.text; g.fill();
         p.txt(String(v), px + 14, py - 12, "500", 19, SC.text);
       });
+      y = base2 + 60;
     }
+    if (compact) notesInto(p, y, 1350 - 170, true);
     return [p];
   }
   // 総合: 投資候補・注意の一言、配当方針、株主優待、業種に合わせた目安
-  function notesInto(p, y, maxY) {
+  function notesInto(p, y, maxY, compact) {
     var k = shareCtx(), rec = k.rec;
+    // compact: 見出しと本文を詰めて、1〜2行ずつにする(2枚の版)
+    var FS = compact ? 22 : 25, LH = compact ? 32 : 38, TOP = compact ? 40 : 46, BODY = compact ? 76 : 92, PAD = compact ? 50 : 70, GAP = compact ? 12 : 20;
     function block(title, body, color, soft, maxLines) {
-      if (!body || y > maxY - 120) return;
-      var nl = p.measureLines(body, "500", 25, SR - SX - 48, maxLines), hgt = 70 + nl * 38 + 20;
-      if (y + hgt > maxY) { nl = Math.max(1, Math.floor((maxY - y - 90) / 38)); hgt = 70 + nl * 38 + 20; }
-      p.rr(SX, y, SR - SX, hgt, 20, soft);
-      p.txt(title, SX + 24, y + 46, "700", 28, color);
-      p.wrap(body, SX + 24, y + 92, "500", 25, SC.text, SR - SX - 48, 38, nl);
-      y += hgt + 20;
+      if (!body || y > maxY - (compact ? 90 : 120)) return;
+      if (compact) maxLines = Math.min(maxLines, 2);
+      var nl = p.measureLines(body, "500", FS, SR - SX - 48, maxLines), hgt = PAD + nl * LH + 20;
+      if (y + hgt > maxY) { nl = Math.max(1, Math.floor((maxY - y - PAD - 20) / LH)); hgt = PAD + nl * LH + 20; }
+      p.rr(SX, y, SR - SX, hgt, 18, soft);
+      p.txt(title, SX + 24, y + TOP, "700", compact ? 24 : 28, color);
+      p.wrap(body, SX + 24, y + BODY, "500", FS, SC.text, SR - SX - 48, LH, nl);
+      y += hgt + GAP;
     }
     if (k.a) compositeOf(rec, k.a.ev).forEach(function (c) {
       block(c.kind === "good" ? "総合" : "注意", c.text.replace(/^(投資候補|注意): /, ""), c.kind === "good" ? SC.good : SC.mid, c.kind === "good" ? SC.goodSoft : SC.midSoft, 4);
     });
-    if (k.s.badItems.length) block("基準を外れた項目", k.s.badItems.map(function (r) { return r.item.name; }).join("、"), SC.bad, SC.badSoft, 2);
+    if (k.s.badItems.length && !compact) block("基準を外れた項目", k.s.badItems.map(function (r) { return r.item.name; }).join("、"), SC.bad, SC.badSoft, 2);
     if (rec && rec.pol && rec.pol.length) block("配当方針: " + rec.pol.join("・") + "を宣言", String((rec.polq && rec.polq[0]) || "").replace(/^[0-9０-９]*\s*【配当政策】\s*/, ""), SC.ok, SC.okSoft, 6);
-    else if (rec) block("配当方針", "有価証券報告書の配当政策に、累進配当・DOEの記載はありません。", SC.sub, SC.field, 2);
+    else if (rec && !compact) block("配当方針", "有価証券報告書の配当政策に、累進配当・DOEの記載はありません。", SC.sub, SC.field, 2);
     var pk = perkNow && perkNow.code === k.code ? perkNow : null;
     // 優待の文の後ろに付いている定款の注記(単元未満株式の権利)は外す
     if (pk && pk.f !== undefined) block("株主優待: " + (pk.f ? "あり" : "なし"), pk.f ? String(pk.text || "").split(/\(注\s*\d?\)|（注/)[0].trim() : "", SC.accent, SC.accentSoft, 3);
     var notes = rec ? SECTOR_NOTES.filter(function (n) { return n.sectors.indexOf(rec.sec) !== -1; }) : [];
-    if (notes.length) block("業種に合わせた目安(" + rec.sec + ")", notes.map(function (n) { return n.items + ": " + n.how; }).join(" ・ "), SC.sub, SC.field, 3);
+    if (notes.length && !compact) block("業種に合わせた目安(" + rec.sec + ")", notes.map(function (n) { return n.items + ": " + n.how; }).join(" ・ "), SC.sub, SC.field, 3);
   }
   function shareFileName(i, n) { return "ir-check-" + (curCode() || "check") + "-" + todayStamp() + (n > 1 ? "-" + (i + 1) : "") + ".png"; }
   function shareCaption() {
@@ -2027,7 +2051,7 @@
   }
   function paintShare() {
     var pages = shareMode === "one" ? [drawSummary(1640, 56, true)]
-      : [drawSummary(1350, 0, false, true)].concat(drawReasons(), drawTrends());
+      : [drawSummary(1350, 48, false, false, true)].concat(drawTrends(true));
     pages.forEach(function (p, i) { shareFoot(p, i + 1, pages.length); });
     var box = document.getElementById("sharePreviews");
     box.innerHTML = "";
