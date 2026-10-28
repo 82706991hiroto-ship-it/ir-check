@@ -238,6 +238,10 @@
   .share-dialog h3 { margin: 0 0 4px; font-size: 17px; }
   .share-dialog .hint { font-size: 12.5px; color: var(--text-2); margin: 4px 0 8px; overflow-wrap: anywhere; }
   .share-opt { display: flex; gap: 6px; align-items: center; font-size: 13px; margin-bottom: 8px; }
+  .share-modes { display: flex; gap: 6px; margin-bottom: 8px; }
+  .share-modes button { flex: 1; font: inherit; font-size: 13px; font-weight: 700; padding: 8px; border-radius: 10px; border: 1px solid var(--line); background: var(--field); color: var(--text-2); cursor: pointer; }
+  .share-modes button.on { background: var(--accent-soft); color: var(--accent); border-color: transparent; }
+  .share-previews { display: grid; gap: 8px; max-height: 52vh; overflow-y: auto; }
   .share-preview { display: block; width: 100%; border-radius: 12px; border: 1px solid var(--line); background: #fff; }
   .share-btns { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px; }
   .toolbar-sub { flex-basis: 100%; display: flex; flex-wrap: wrap; gap: 4px 16px; }
@@ -626,8 +630,9 @@
   <dialog class="share-dialog" id="shareDialog">
     <h3>SNS用の画像</h3>
     <p class="hint">採点の結果をそのまま載せられる画像です。</p>
+    <div class="share-modes" id="shareModes"><button type="button" class="on" data-mode="one">1枚(まとめ)</button><button type="button" data-mode="full">詳しく(複数枚)</button></div>
     <label class="share-opt"><input type="checkbox" id="shareHidePrice"> 株価と利回りを載せない</label>
-    <img class="share-preview" id="sharePreview" alt="チェックシートの採点の画像">
+    <div class="share-previews" id="sharePreviews"></div>
     <p class="hint" id="shareText"></p>
     <div class="share-btns">
       <button type="button" class="btn primary" id="shareGo">共有する</button>
@@ -1800,49 +1805,81 @@
 
 
   // ---------- SNS用の画像 ----------
-  // 採点の結果(◎○△❌・10項目・利回り・1株配当の推移)を縦長の画像にする。色は画面のダークモードに関係なく明るい配色で固定
+  // 採点の結果を画像にする。「1枚」はまとめだけ(1080×1640)。「詳しく」は 1080×1350 の4枚まで(X は1回に4枚まで):
+  // まとめ＋総合・配当方針・優待 / 10項目の根拠(1〜2枚) / 配当と利益の推移。色はダークモードに関係なく明るい配色で固定
   var SHARE_URL = "82706991hiroto-ship-it.github.io/ir-check";
-  var shareBlob = null;
-  function shareFileName() { return "ir-check-" + (curCode() || "check") + "-" + todayStamp() + ".png"; }
-  function shareCaption() {
-    var s = summarize(), code = curCode(), name = (state.subject.name || "").normalize("NFKC");
-    return (code + " " + name).trim() + " 高配当株チェック ◎" + s.counts.good + " ○" + s.counts.ok + " △" + s.counts.mid + " ❌" + s.counts.bad +
-      " ・ 重要項目 " + s.starPassing + "/" + s.starTotal + "\n#高配当株" + (name ? " #" + name.replace(/[\s・()()]/g, "") : "") +
-      "\nhttps://" + SHARE_URL + "/" + (code ? "?code=" + encodeURIComponent(code) : "");
+  var shareBlobs = [], shareMode = "one";
+  var SC = { page: "#f6f7fb", card: "#ffffff", text: "#23282e", sub: "#5f6b7a", line: "#e5e8ef", field: "#f3f5f9", stripe: "#f8f9fc",
+             accent: "#e8543f", accentSoft: "#fdeeeb", good: "#16a34a", goodSoft: "#e9f7ef", ok: "#2563eb", okSoft: "#eaf1fe",
+             mid: "#d97706", midSoft: "#fdf2e3", bad: "#dc2626", badSoft: "#fdecec", none: "#97a0ad" };
+  var SLV = { good: SC.good, ok: SC.ok, mid: SC.mid, bad: SC.bad, none: SC.none };
+  var SMK = { good: "◎", ok: "○", mid: "△", bad: "×", none: "—" };
+  var SF = '"Noto Sans JP", "Hiragino Sans", sans-serif';
+  var SX = 96, SR = 1080 - 96;
+  function sharePage(H) {
+    var c = document.createElement("canvas"); c.width = 1080; c.height = H;
+    var g = c.getContext("2d");
+    var p = { c: c, g: g, H: H };
+    p.font = function (w, px) { g.font = w + " " + px + "px " + SF; };
+    p.txt = function (t, x, y, w, px, color, align) { p.font(w, px); g.fillStyle = color; g.textAlign = align || "left"; g.fillText(t, x, y); };
+    p.fit = function (t, w, px, maxW) { p.font(w, px); t = String(t); while (t.length > 1 && g.measureText(t).width > maxW) t = t.slice(0, -2) + "…"; return t; };
+    p.rr = function (x, y, w, h, r, color) { g.beginPath(); g.moveTo(x + r, y); g.arcTo(x + w, y, x + w, y + h, r); g.arcTo(x + w, y + h, x, y + h, r); g.arcTo(x, y + h, x, y, r); g.arcTo(x, y, x + w, y, r); g.closePath(); g.fillStyle = color; g.fill(); };
+    // 日本語は単語の区切りが無いので1文字ずつ折り返す。maxLines を超えたら … で切る
+    p.wrap = function (t, x, y, w, px, color, maxW, lh, maxLines) {
+      p.font(w, px); var lines = [], cur = "";
+      String(t || "").split("").forEach(function (ch) { if (g.measureText(cur + ch).width > maxW) { lines.push(cur); cur = ch; } else cur += ch; });
+      if (cur) lines.push(cur);
+      if (maxLines && lines.length > maxLines) { lines = lines.slice(0, maxLines); lines[maxLines - 1] = p.fit(lines[maxLines - 1] + "……", w, px, maxW); }
+      lines.forEach(function (l, i) { p.txt(l, x, y + i * lh, w, px, color); });
+      return lines.length * lh;
+    };
+    p.measureLines = function (t, w, px, maxW, maxLines) {
+      p.font(w, px); var n = 0, cur = "";
+      String(t || "").split("").forEach(function (ch) { if (g.measureText(cur + ch).width > maxW) { n++; cur = ch; } else cur += ch; });
+      if (cur) n++;
+      return maxLines ? Math.min(n, maxLines) : n;
+    };
+    g.fillStyle = SC.page; g.fillRect(0, 0, 1080, H);
+    p.rr(40, 40, 1000, H - 80, 36, SC.card);
+    return p;
   }
-  function paintShare() {
-    var W = 1080, H = 1640, c = document.createElement("canvas");
-    c.width = W; c.height = H;
-    var g = c.getContext("2d"), F = '"Noto Sans JP", "Hiragino Sans", sans-serif';
-    var C = { page: "#f6f7fb", card: "#ffffff", text: "#23282e", sub: "#5f6b7a", line: "#e5e8ef", field: "#f3f5f9",
-              accent: "#e8543f", accentSoft: "#fdeeeb", good: "#16a34a", ok: "#2563eb", mid: "#d97706", bad: "#dc2626", none: "#97a0ad" };
-    var LV = { good: C.good, ok: C.ok, mid: C.mid, bad: C.bad, none: C.none };
-    var MK = { good: "◎", ok: "○", mid: "△", bad: "×", none: "—" };
-    function font(w, px) { g.font = w + " " + px + "px " + F; }
-    function txt(t, x, y, w, px, color, align) { font(w, px); g.fillStyle = color; g.textAlign = align || "left"; g.fillText(t, x, y); }
-    function fit(t, w, px, maxW) { font(w, px); while (t.length > 1 && g.measureText(t).width > maxW) t = t.slice(0, -2) + "…"; return t; }
-    function rr(x, y, w, h, r, color) { g.beginPath(); g.moveTo(x + r, y); g.arcTo(x + w, y, x + w, y + h, r); g.arcTo(x + w, y + h, x, y + h, r); g.arcTo(x, y + h, x, y, r); g.arcTo(x, y, x + w, y, r); g.closePath(); g.fillStyle = color; g.fill(); }
-    g.fillStyle = C.page; g.fillRect(0, 0, W, H);
-    rr(40, 40, W - 80, H - 80, 36, C.card);
-    var s = summarize(), code = curCode(), name = (state.subject.name || "").normalize("NFKC");
-    var a = state.auto && state.auto.code === code ? state.auto : null, rec = a ? a.rec : null;
-    var X = 96, R = W - 96;
-    txt("高配当株チェック", X, 128, "700", 30, C.accent);
-    txt(todayStamp().replace(/-/g, "/") + " 時点", R, 128, "500", 26, C.sub, "right");
-    txt(fit((code + " " + name).trim() || "銘柄", "700", 60, R - X), X, 210, "700", 60, C.text);
-    var fyTxt = a && a.fy ? String(a.fy).replace(/^(\d{4})-(\d{2}).*$/, function (_, y, m) { return y + "年" + (+m) + "月期"; }) : "";
-    if (rec && rec.sec) txt(rec.sec + (fyTxt ? " ・ " + fyTxt + "の有価証券報告書で採点" : ""), X, 258, "500", 26, C.sub);
-    // 判定
-    var verdict = s.counts.bad > 0 ? ["基準を外れた項目 " + s.counts.bad, C.bad, "#fdecec"] : s.starPassing === s.starTotal && s.starTotal > 0 ? ["基準内", C.good, "#e9f7ef"] : ["要確認", C.mid, "#fdf2e3"];
+  function shareHead(p, sectionTitle) {
+    var code = curCode(), name = (state.subject.name || "").normalize("NFKC");
+    p.txt("高配当株チェック" + (sectionTitle ? " ・ " + sectionTitle : ""), SX, 128, "700", 30, SC.accent);
+    p.txt(todayStamp().replace(/-/g, "/") + " 時点", SR, 128, "500", 26, SC.sub, "right");
+    if (sectionTitle) { p.txt(p.fit((code + " " + name).trim(), "700", 44, SR - SX), SX, 196, "700", 44, SC.text); return 236; }
+    p.txt(p.fit((code + " " + name).trim() || "銘柄", "700", 60, SR - SX), SX, 210, "700", 60, SC.text);
+    return 220;
+  }
+  function shareFoot(p, page, total) {
+    p.g.fillStyle = SC.line; p.g.fillRect(SX, p.H - 150, SR - SX, 2);
+    p.txt("EDINETの有価証券報告書をもとに作成 ・ 投資の判断はご自身で", SX, p.H - 106, "500", 22, SC.sub);
+    p.txt(SHARE_URL, SX, p.H - 72, "700", 24, SC.accent);
+    if (total > 1) p.txt(page + " / " + total, SR, p.H - 72, "700", 26, SC.sub, "right");
+  }
+  function shareCtx() {
+    var code = curCode(), a = state.auto && state.auto.code === code ? state.auto : null;
+    return { s: summarize(), code: code, a: a, rec: a ? a.rec : null };
+  }
+  function fyText(fy) { return fy ? String(fy).replace(/^(\d{4})-(\d{2}).*$/, function (_, y, m) { return y + "年" + (+m) + "月期"; }) : ""; }
+  // 1枚目: まとめ。rowH: 10項目の行の高さ。withChart: 1株配当の推移も入れる(1枚だけのとき)
+  function drawSummary(H, rowH, withChart, withNotes) {
+    var p = sharePage(H), k = shareCtx(), s = k.s, a = k.a, rec = k.rec, code = k.code;
+    shareHead(p, "");
+    var fyT = fyText(a && a.fy);
+    if (rec && rec.sec) p.txt(rec.sec + (fyT ? " ・ " + fyT + "の有価証券報告書で採点" : ""), SX, 258, "500", 26, SC.sub);
+    var verdict = s.counts.bad > 0 ? ["基準を外れた項目 " + s.counts.bad, SC.bad, SC.badSoft] : s.starPassing === s.starTotal && s.starTotal > 0 ? ["基準内", SC.good, SC.goodSoft] : ["要確認", SC.mid, SC.midSoft];
     var y = 300;
-    rr(X, y, R - X, 150, 24, C.field);
-    font("700", 30); var vw = g.measureText(verdict[0]).width + 48;
-    rr(X + 28, y + 28, vw, 52, 26, verdict[2]); txt(verdict[0], X + 28 + vw / 2, y + 65, "700", 30, verdict[1], "center");
-    txt("重要項目(★)  " + s.starPassing + " / " + s.starTotal + " が◎○", X + 28, y + 122, "500", 28, C.sub);
-    var cx = R - 28, parts = [["×", s.counts.bad, C.bad], ["△", s.counts.mid, C.mid], ["○", s.counts.ok, C.ok], ["◎", s.counts.good, C.good]];
-    parts.forEach(function (p) { txt(String(p[1]), cx, y + 108, "700", 64, p[2], "right"); font("700", 64); var w1 = g.measureText(String(p[1])).width; txt(p[0], cx - w1 - 8, y + 104, "700", 40, p[2], "right"); font("700", 40); cx -= w1 + 8 + g.measureText(p[0]).width + 34; });
+    p.rr(SX, y, SR - SX, 150, 24, SC.field);
+    p.font("700", 30); var vw = p.g.measureText(verdict[0]).width + 48;
+    p.rr(SX + 28, y + 28, vw, 52, 26, verdict[2]); p.txt(verdict[0], SX + 28 + vw / 2, y + 65, "700", 30, verdict[1], "center");
+    p.txt("重要項目(★)  " + s.starPassing + " / " + s.starTotal + " が◎○", SX + 28, y + 122, "500", 28, SC.sub);
+    var cx = SR - 28;
+    [["×", s.counts.bad, SC.bad], ["△", s.counts.mid, SC.mid], ["○", s.counts.ok, SC.ok], ["◎", s.counts.good, SC.good]].forEach(function (q) {
+      p.txt(String(q[1]), cx, y + 108, "700", 64, q[2], "right"); p.font("700", 64); var w1 = p.g.measureText(String(q[1])).width;
+      p.txt(q[0], cx - w1 - 8, y + 104, "700", 40, q[2], "right"); p.font("700", 40); cx -= w1 + 8 + p.g.measureText(q[0]).width + 34;
+    });
     y += 180;
-    // 利回り
     var hide = document.getElementById("shareHidePrice").checked;
     var price = parseFloat(state.subject.price), fdiv = parseFloat(state.subject.fdiv);
     var div = rec && rec.div ? rec.div[rec.div.length - 1] : null;
@@ -1852,51 +1889,155 @@
       if (div > 0) tiles.push(["配当利回り(実績)", (div / price * 100).toFixed(2) + "%", !(fdiv > 0)]);
       var pf = perkNow && perkNow.code === code ? perkNow.f : null;
       if (Array.isArray(pf) && pf.length) tiles.push(["優待込み", ((fdiv > 0 ? fdiv : div) / price * 100 + pf[0][1] / (pf[0][0] * price) * 100).toFixed(2) + "%", false]);
-      var tw = (R - X - 20 * (tiles.length - 1)) / tiles.length;
+      var tw = (SR - SX - 20 * (tiles.length - 1)) / tiles.length;
       tiles.forEach(function (t, i) {
-        var tx = X + i * (tw + 20);
-        rr(tx, y, tw, 120, 22, t[2] ? C.accentSoft : C.field);
-        txt(t[0], tx + 24, y + 42, "500", 24, C.sub);
-        txt(t[1], tx + 24, y + 98, "700", 46, t[2] ? C.accent : C.text);
+        var tx = SX + i * (tw + 20);
+        p.rr(tx, y, tw, 120, 22, t[2] ? SC.accentSoft : SC.field);
+        p.txt(t[0], tx + 24, y + 42, "500", 24, SC.sub);
+        p.txt(t[1], tx + 24, y + 98, "700", 46, t[2] ? SC.accent : SC.text);
       });
-      txt("株価 " + price.toLocaleString("ja-JP") + "円で計算", R, y + 152, "500", 22, C.sub, "right");
+      p.txt("株価 " + price.toLocaleString("ja-JP") + "円で計算", SR, y + 152, "500", 22, SC.sub, "right");
       y += 176;
     }
-    // 10項目
-    txt("10項目の判定", X, y + 20, "700", 30, C.text);
+    if (withNotes) { notesInto(p, y, H - 180); return p; }
+    p.txt("10項目の判定", SX, y + 20, "700", 30, SC.text);
     y += 44;
-    var rows = s.results, rowH = 56;
-    rows.forEach(function (r, i) {
+    var fs = rowH >= 56 ? 28 : 25;
+    s.results.forEach(function (r, i) {
       var ry = y + i * rowH;
-      if (i % 2 === 0) rr(X - 12, ry + 4, R - X + 24, rowH - 4, 12, "#f8f9fc");
-      var mid = ry + rowH / 2 + 12;
-      txt(MK[r.level], X + 8, mid, "700", 34, LV[r.level]);
-      txt(fit(r.item.name + (r.item.star ? " ★" : ""), "500", 28, 440), X + 70, mid, "500", 28, C.text);
-      txt(fit(labelOf(r.item, r.value) || "—", "700", 28, R - X - 540), R - 8, mid, "700", 28, r.level === "none" ? C.none : C.text, "right");
+      if (i % 2 === 0) p.rr(SX - 12, ry + 4, SR - SX + 24, rowH - 4, 12, SC.stripe);
+      var mid = ry + rowH / 2 + 11;
+      p.txt(SMK[r.level], SX + 8, mid, "700", fs + 6, SLV[r.level]);
+      p.txt(p.fit(r.item.name + (r.item.star ? " ★" : ""), "500", fs, 440), SX + 70, mid, "500", fs, SC.text);
+      p.txt(p.fit(labelOf(r.item, r.value) || "—", "700", fs, SR - SX - 540), SR - 8, mid, "700", fs, r.level === "none" ? SC.none : SC.text, "right");
     });
-    y += rows.length * rowH + 30;
-    // 1株配当の推移(最大10期)
-    var ds = rec ? (rec.dl && rec.dl.length > (rec.div || []).length ? rec.dl : rec.div) : null;
-    if (ds && ds.length >= 2) {
-      ds = ds.slice(-10);
-      var top = Math.max.apply(null, ds) || 1, bh = Math.min(220, H - 170 - y - 40), bw = (R - X) / ds.length;
-      txt("1株配当の推移(直近" + ds.length + "期)", X, y + 10, "700", 26, C.text);
-      ds.forEach(function (v, i) {
-        var h1 = Math.max(4, (v / top) * (bh - 30)), bx = X + i * bw + bw * 0.18;
-        var down = i > 0 && v < ds[i - 1] - 0.005;
-        rr(bx, y + 30 + (bh - 30 - h1) + 10, bw * 0.64, h1, 6, down ? C.bad : C.ok);
-      });
-      txt(String(ds[ds.length - 1]) + "円", R, y + 10, "700", 26, C.ok, "right");
+    y += s.results.length * rowH + 30;
+    if (withChart) {
+      var ds = rec ? (rec.dl && rec.dl.length > (rec.div || []).length ? rec.dl : rec.div) : null;
+      if (ds && ds.length >= 2) {
+        ds = ds.slice(-10);
+        var top = Math.max.apply(null, ds) || 1, bh = Math.min(220, H - 170 - y - 40), bw = (SR - SX) / ds.length;
+        p.txt("1株配当の推移(直近" + ds.length + "期)", SX, y + 10, "700", 26, SC.text);
+        ds.forEach(function (v, i) {
+          var h1 = Math.max(4, (v / top) * (bh - 30)), bx = SX + i * bw + bw * 0.18, down = i > 0 && v < ds[i - 1] - 0.005;
+          p.rr(bx, y + 30 + (bh - 30 - h1) + 10, bw * 0.64, h1, 6, down ? SC.bad : SC.ok);
+        });
+        p.txt(String(ds[ds.length - 1]) + "円", SR, y + 10, "700", 26, SC.ok, "right");
+      }
     }
-    // 下の注記
-    g.fillStyle = C.line; g.fillRect(X, H - 150, R - X, 2);
-    txt("EDINETの有価証券報告書をもとに作成 ・ 投資の判断はご自身で", X, H - 106, "500", 22, C.sub);
-    txt(SHARE_URL, X, H - 72, "700", 24, C.accent);
-    c.toBlob(function (b) {
-      shareBlob = b;
-      document.getElementById("sharePreview").src = URL.createObjectURL(b);
-    }, "image/png");
-    document.getElementById("shareText").textContent = "投稿の文面: " + shareCaption().replace(/\n/g, " ");
+    return p;
+  }
+  // 10項目の根拠(画面の「根拠」の文)。入りきらなければ次の画像へ
+  function drawReasons() {
+    var k = shareCtx(), pages = [], p = null, y = 0, H = 1350, res = k.s.results;
+    // 1枚に入りきらなければ、前半・後半に半分ずつ分ける(2枚目がほとんど空にならないように)
+    var probe = sharePage(H), need = 0;
+    res.forEach(function (r) { var e = k.a && k.a.ev[r.item.key]; need += 58 + probe.measureLines(e && e.reason || "", "500", 23, SR - SX - 70, 4) * 34 + 22; });
+    var split = need > H - 170 - 266 ? Math.ceil(res.length / 2) : res.length;
+    function fresh(part) { p = sharePage(H); y = shareHead(p, "10項目の根拠" + (split < res.length ? "(" + part + "/2)" : "")) + 30; pages.push(p); }
+    fresh(1);
+    res.forEach(function (r, idx) {
+      if (idx === split) fresh(2);
+      var e = k.a && k.a.ev[r.item.key], why = e && e.reason ? e.reason : (r.level === "none" ? "未入力" : "手で入力");
+      var sn = k.a && sectorNote(k.rec && k.rec.sec, r.item.key);
+      if (sn) why += "(" + sn.label + "は" + sn.how + ")";
+      var nl = p.measureLines(why, "500", 23, SR - SX - 70, 4), hgt = 58 + nl * 34 + 22;
+      p.rr(SX - 12, y, SR - SX + 24, hgt - 12, 16, SC.stripe);
+      p.txt(SMK[r.level], SX + 8, y + 46, "700", 34, SLV[r.level]);
+      p.txt(p.fit(r.item.name + (r.item.star ? " ★" : ""), "700", 28, 520), SX + 70, y + 46, "700", 28, SC.text);
+      p.txt(p.fit(labelOf(r.item, r.value) || "—", "700", 28, SR - SX - 620), SR - 8, y + 46, "700", 28, SLV[r.level] === SC.none ? SC.none : SC.text, "right");
+      p.wrap(why, SX + 70, y + 86, "500", 23, SC.sub, SR - SX - 70, 34, 4);
+      y += hgt;
+    });
+    return pages;
+  }
+  // 配当と利益の推移: 1株配当(最大14期、減った期は赤・会社予想は薄く)と、配当性向・1株利益(5期)
+  function drawTrends() {
+    var k = shareCtx(), rec = k.rec;
+    if (!rec || !rec.div || !rec.fy) return [];
+    var p = sharePage(1350), y = shareHead(p, "配当と利益の推移") + 40;
+    var ds = rec.dl && rec.dl.length > rec.div.length ? rec.dl : rec.div, fd = parseFloat(state.subject.fdiv);
+    var labels = fyLabels(rec.fy, ds.length), vals = ds.slice();
+    if (fd > 0) { vals.push(fd); labels.push(shiftFy(rec.fy, 1).slice(2, 4) + "/" + (+rec.fy.slice(5, 7)) + "予"); }
+    p.txt("1株配当(円)", SX, y, "700", 30, SC.text);
+    p.txt("赤は前の期より減った期" + (fd > 0 ? "・薄い棒は会社予想" : ""), SR, y, "500", 22, SC.sub, "right");
+    var top = Math.max.apply(null, vals) || 1, ch = 330, bw = (SR - SX) / vals.length, base = y + 40 + ch;
+    vals.forEach(function (v, i) {
+      var h1 = Math.max(3, v / top * (ch - 40)), bx = SX + i * bw + bw * 0.16, fc = fd > 0 && i === vals.length - 1;
+      var down = i > 0 && v < vals[i - 1] - 0.005;
+      p.rr(bx, base - h1, bw * 0.68, h1, 6, fc ? "#a9c1f5" : down ? SC.bad : SC.ok);
+      if (i === vals.length - 1 || i === 0 || vals.length <= 8) p.txt(String(v), bx + bw * 0.34, base - h1 - 10, "700", 20, SC.text, "center");
+      if (vals.length <= 10 || i % 2 === (vals.length - 1) % 2) p.txt(labels[i], bx + bw * 0.34, base + 30, "500", 19, SC.sub, "center");
+    });
+    y = base + 90;
+    var e = rec.eps || [], d5 = rec.div.slice(-e.length), n = Math.min(e.length, d5.length);
+    if (n >= 2) {
+      e = e.slice(-n); d5 = d5.slice(-n);
+      var po = d5.map(function (v, i) { return e[i] > 0 ? v / e[i] * 100 : 0; }), lab = fyLabels(rec.fy, n);
+      p.txt("配当性向(%)と1株利益(円)", SX, y, "700", 30, SC.text);
+      p.txt("棒=配当性向 ・ 点=1株利益", SR, y, "500", 22, SC.sub, "right");
+      var ch2 = 300, base2 = y + 40 + ch2, bw2 = (SR - SX) / n, pTop = Math.max(60, Math.max.apply(null, po)), eTop = Math.max.apply(null, e.map(function (v) { return Math.abs(v); })) || 1;
+      po.forEach(function (v, i) {
+        var h1 = Math.max(3, v / pTop * (ch2 - 60)), bx = SX + i * bw2 + bw2 * 0.22;
+        p.rr(bx, base2 - h1, bw2 * 0.56, h1, 6, v >= 70 ? SC.bad : v >= 50 ? SC.mid : SC.ok);
+        p.txt(v.toFixed(0) + "%", bx + bw2 * 0.28, base2 - h1 - 12, "700", 22, SC.text, "center");
+        p.txt(lab[i], bx + bw2 * 0.28, base2 + 30, "500", 20, SC.sub, "center");
+      });
+      var g = p.g; g.strokeStyle = SC.text; g.lineWidth = 4; g.beginPath();
+      e.forEach(function (v, i) { var px = SX + i * bw2 + bw2 / 2, py = base2 - Math.max(0, v) / eTop * (ch2 - 60) - 10; if (i) g.lineTo(px, py); else g.moveTo(px, py); });
+      g.stroke();
+      e.forEach(function (v, i) {
+        var px = SX + i * bw2 + bw2 / 2, py = base2 - Math.max(0, v) / eTop * (ch2 - 60) - 10;
+        g.beginPath(); g.arc(px, py, 9, 0, Math.PI * 2); g.fillStyle = SC.text; g.fill();
+        p.txt(String(v), px + 14, py - 12, "500", 19, SC.text);
+      });
+    }
+    return [p];
+  }
+  // 総合: 投資候補・注意の一言、配当方針、株主優待、業種に合わせた目安
+  function notesInto(p, y, maxY) {
+    var k = shareCtx(), rec = k.rec;
+    function block(title, body, color, soft, maxLines) {
+      if (!body || y > maxY - 120) return;
+      var nl = p.measureLines(body, "500", 25, SR - SX - 48, maxLines), hgt = 70 + nl * 38 + 20;
+      if (y + hgt > maxY) { nl = Math.max(1, Math.floor((maxY - y - 90) / 38)); hgt = 70 + nl * 38 + 20; }
+      p.rr(SX, y, SR - SX, hgt, 20, soft);
+      p.txt(title, SX + 24, y + 46, "700", 28, color);
+      p.wrap(body, SX + 24, y + 92, "500", 25, SC.text, SR - SX - 48, 38, nl);
+      y += hgt + 20;
+    }
+    if (k.a) compositeOf(rec, k.a.ev).forEach(function (c) {
+      block(c.kind === "good" ? "総合" : "注意", c.text.replace(/^(投資候補|注意): /, ""), c.kind === "good" ? SC.good : SC.mid, c.kind === "good" ? SC.goodSoft : SC.midSoft, 4);
+    });
+    if (k.s.badItems.length) block("基準を外れた項目", k.s.badItems.map(function (r) { return r.item.name; }).join("、"), SC.bad, SC.badSoft, 2);
+    if (rec && rec.pol && rec.pol.length) block("配当方針: " + rec.pol.join("・") + "を宣言", String((rec.polq && rec.polq[0]) || "").replace(/^[0-9０-９]*\s*【配当政策】\s*/, ""), SC.ok, SC.okSoft, 6);
+    else if (rec) block("配当方針", "有価証券報告書の配当政策に、累進配当・DOEの記載はありません。", SC.sub, SC.field, 2);
+    var pk = perkNow && perkNow.code === k.code ? perkNow : null;
+    // 優待の文の後ろに付いている定款の注記(単元未満株式の権利)は外す
+    if (pk && pk.f !== undefined) block("株主優待: " + (pk.f ? "あり" : "なし"), pk.f ? String(pk.text || "").split(/\(注\s*\d?\)|（注/)[0].trim() : "", SC.accent, SC.accentSoft, 3);
+    var notes = rec ? SECTOR_NOTES.filter(function (n) { return n.sectors.indexOf(rec.sec) !== -1; }) : [];
+    if (notes.length) block("業種に合わせた目安(" + rec.sec + ")", notes.map(function (n) { return n.items + ": " + n.how; }).join(" ・ "), SC.sub, SC.field, 3);
+  }
+  function shareFileName(i, n) { return "ir-check-" + (curCode() || "check") + "-" + todayStamp() + (n > 1 ? "-" + (i + 1) : "") + ".png"; }
+  function shareCaption() {
+    var s = summarize(), code = curCode(), name = (state.subject.name || "").normalize("NFKC");
+    return (code + " " + name).trim() + " 高配当株チェック ◎" + s.counts.good + " ○" + s.counts.ok + " △" + s.counts.mid + " ❌" + s.counts.bad +
+      " ・ 重要項目 " + s.starPassing + "/" + s.starTotal + "\n#高配当株" + (name ? " #" + name.replace(/[\s・()()]/g, "") : "") +
+      "\nhttps://" + SHARE_URL + "/" + (code ? "?code=" + encodeURIComponent(code) : "");
+  }
+  function paintShare() {
+    var pages = shareMode === "one" ? [drawSummary(1640, 56, true)]
+      : [drawSummary(1350, 0, false, true)].concat(drawReasons(), drawTrends());
+    pages.forEach(function (p, i) { shareFoot(p, i + 1, pages.length); });
+    var box = document.getElementById("sharePreviews");
+    box.innerHTML = "";
+    shareBlobs = new Array(pages.length);
+    pages.forEach(function (p, i) {
+      var img = document.createElement("img"); img.className = "share-preview"; img.alt = "採点の画像 " + (i + 1);
+      box.appendChild(img);
+      p.c.toBlob(function (b) { shareBlobs[i] = b; img.src = URL.createObjectURL(b); }, "image/png");
+    });
+    document.getElementById("shareText").textContent = (pages.length > 1 ? pages.length + "枚 ・ " : "") + "投稿の文面: " + shareCaption().replace(/\n/g, " ");
   }
   function openShare() {
     if (!curCode()) { setStatus("証券コードを入れてから作ってください。"); return; }
@@ -1904,21 +2045,31 @@
     paintShare();
     if (document.fonts && document.fonts.load) Promise.all([document.fonts.load('700 40px "Noto Sans JP"'), document.fonts.load('500 28px "Noto Sans JP"')]).then(paintShare, function () {});
   }
+  function shareFiles() {
+    return shareBlobs.filter(Boolean).map(function (b, i, all) { return new File([b], shareFileName(i, all.length), { type: "image/png" }); });
+  }
   function saveShare() {
-    if (!shareBlob) return;
-    var a = document.createElement("a");
-    a.href = URL.createObjectURL(shareBlob); a.download = shareFileName();
-    document.body.appendChild(a); a.click(); a.remove();
+    shareFiles().forEach(function (f, i) {
+      setTimeout(function () {
+        var a = document.createElement("a"); a.href = URL.createObjectURL(f); a.download = f.name;
+        document.body.appendChild(a); a.click(); a.remove();
+      }, i * 400);
+    });
   }
   document.getElementById("shareBtn").addEventListener("click", openShare);
   document.getElementById("shareHidePrice").addEventListener("change", paintShare);
+  document.getElementById("shareModes").addEventListener("click", function (e) {
+    var b = e.target.closest("[data-mode]"); if (!b) return;
+    shareMode = b.dataset.mode;
+    Array.prototype.forEach.call(this.querySelectorAll("[data-mode]"), function (x) { x.classList.toggle("on", x === b); });
+    paintShare();
+  });
   document.getElementById("shareSave").addEventListener("click", saveShare);
   document.getElementById("shareClose").addEventListener("click", function () { document.getElementById("shareDialog").close(); });
   document.getElementById("shareGo").addEventListener("click", function () {
-    var msg = shareCaption();
-    var file = shareBlob ? new File([shareBlob], shareFileName(), { type: "image/png" }) : null;
-    if (file && navigator.canShare && navigator.canShare({ files: [file] })) {
-      navigator.share({ files: [file], text: msg }).catch(function () {});
+    var msg = shareCaption(), files = shareFiles();
+    if (files.length && navigator.canShare && navigator.canShare({ files: files })) {
+      navigator.share({ files: files, text: msg }).catch(function () {});
     } else {
       // PCなど画像付きで共有できない環境では、画像を保存して文面をコピーする
       saveShare();
@@ -2146,7 +2297,7 @@
     perkData(code).then(function (d) {
       if (curCode() !== code) return;
       var f = d.flag, html;
-      perkNow = { code: code, f: f };
+      perkNow = { code: code, f: f, text: d.text };
       if (f === undefined) html = '<b>株主優待</b> <span class="pk-unk">データなし</span>(有報で確認できませんでした)';
       else if (!f) html = '<b>株主優待</b> <span class="pk-no">なし</span>';
       else {
