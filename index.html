@@ -1810,7 +1810,7 @@
   // (根拠を全文で出す drawReasons と、まとめに総合を入れる withNotes は今は使っていない)色はダークモードに関係なく明るい配色で固定
   var SHARE_URL = "82706991hiroto-ship-it.github.io/ir-check";
   var shareBlobs = [], shareMode = "one";
-  var SC = { page: "#f6f7fb", card: "#ffffff", text: "#23282e", sub: "#5f6b7a", line: "#e5e8ef", field: "#f3f5f9", stripe: "#f8f9fc",
+  var SC = { chart: "#2563eb", page: "#f6f7fb", card: "#ffffff", text: "#23282e", sub: "#5f6b7a", line: "#e5e8ef", field: "#f3f5f9", stripe: "#f8f9fc",
              accent: "#e8543f", accentSoft: "#fdeeeb", good: "#16a34a", goodSoft: "#e9f7ef", ok: "#2563eb", okSoft: "#eaf1fe",
              mid: "#d97706", midSoft: "#fdf2e3", bad: "#dc2626", badSoft: "#fdecec", none: "#97a0ad" };
   var SLV = { good: SC.good, ok: SC.ok, mid: SC.mid, bad: SC.bad, none: SC.none };
@@ -1906,7 +1906,8 @@
     var fs = rowH >= 56 ? 28 : 25;
     s.results.forEach(function (r, i) {
       var ry = y + i * rowH;
-      if (i % 2 === 0) p.rr(SX - 12, ry + 4, SR - SX + 24, rowH - 4, 12, SC.stripe);
+      if (withWhy) { if (i) { p.g.fillStyle = SC.line; p.g.fillRect(SX, ry, SR - SX, 1.5); } }
+      else if (i % 2 === 0) p.rr(SX - 12, ry + 4, SR - SX + 24, rowH - 4, 12, SC.stripe);
       var mid = ry + rowH / 2 + 11;
       p.txt(SMK[r.level], SX + 8, mid, "700", fs + 6, SLV[r.level]);
       var val = p.fit(labelOf(r.item, r.value) || "—", "700", fs, 230);
@@ -1920,8 +1921,8 @@
         var ev0 = k.a && k.a.ev[r.item.key], ser = ev0 && ev0.series ? ev0.series.filter(function (v) { return v != null; }) : null;
         var gx = SX + 300, gw = SR - 8 - vw2 - 30 - gx;
         if (ser && ser.length >= 2 && gw > 120) {
-          // 色は増やさない: 線はどの項目も同じ灰青＋下を薄く塗る・各期に点・最新の期は大きい点。右に「5期 +34%」(減ったときだけ赤)
-          var lw = Math.min(gw - 110, 220), lh = rowH - 10, top0 = ry + 5, col = "#5b6b82";
+          // すっきり見せる: 線はどの項目もグラフの青1色＋下を薄く塗る・点は最新の期だけ。右に最初の期からの変化(減ったときだけ赤)
+          var lw = Math.min(gw - 110, 220), lh = rowH - 10, top0 = ry + 5, col = SC.chart;
           var mn = Math.min.apply(null, ser), mx = Math.max.apply(null, ser);
           if (mx === mn) mx = mn + 1;
           var yv = function (v) { return top0 + lh - 4 - (v - mn) / (mx - mn) * (lh - 8); };
@@ -1939,22 +1940,19 @@
           gg.stroke();
           ser.forEach(function (v, j) {
             var last = j === ser.length - 1;
-            gg.beginPath(); gg.arc(xs[j], yv(v), last ? 7 : (ser.length > 8 ? 0 : 4), 0, Math.PI * 2); gg.fillStyle = col; gg.fill();
+            gg.beginPath(); gg.arc(xs[j], yv(v), last ? 6.5 : 0, 0, Math.PI * 2); gg.fillStyle = col; gg.fill();
           });
           // 比率の項目(自己資本比率・ROE)は「ポイント」の差、金額の項目は最初の期からの増減率
           var f0 = ser[0], f1 = ser[ser.length - 1], isRatio = r.item.key === "equity" || r.item.key === "roe";
           var chg = isRatio ? (f1 - f0) * 100 : f0 > 0 && f1 > 0 ? (f1 / f0 - 1) * 100 : null;
-          var pl = ser.length + "期";
-          p.txt(pl, gx + lw + 12, mid - 1, "500", 19, SC.sub);
           if (chg !== null) {
-            p.font("500", 19); var plw = p.g.measureText(pl).width;
+            var plw = -8;
             var ct = Math.abs(chg) < 0.5 ? "±0" + (isRatio ? "pt" : "%") : (chg > 0 ? "+" : "−") + Math.abs(chg).toFixed(isRatio ? 1 : 0) + (isRatio ? "pt" : "%");
             p.txt(ct, gx + lw + 12 + plw + 8, mid - 1, "700", 21, chg <= -0.5 ? SC.bad : SC.text);
           }
         } else {
-          var e = k.a && k.a.ev[r.item.key], why = e && e.reason ? String(e.reason).split("。")[0] : "";
-          var sn = k.a && sectorNote(k.rec && k.rec.sec, r.item.key);
-          if (sn) why = "業種の目安で判定 ・ " + why;
+          // グラフの無い項目は、業種の目安で判定したときだけ一言(ほかは何も書かない)
+          var sn = k.a && sectorNote(k.rec && k.rec.sec, r.item.key), why = sn ? "業種の目安(" + sn.how.replace(/ で判定$/, "").replace(/❌/g, "×") + ")" : "";
           p.txt(p.fit(why, "500", 21, SR - 8 - vw2 - 24 - gx), gx, mid - 1, "500", 21, SC.sub);
         }
       } else {
