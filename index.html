@@ -632,6 +632,7 @@
     <p class="hint">採点の結果をそのまま載せられる画像です。</p>
     <div class="share-modes" id="shareModes"><button type="button" class="on" data-mode="one">1枚(まとめ)</button><button type="button" data-mode="full">詳しく(2枚)</button></div>
     <label class="share-opt"><input type="checkbox" id="shareHidePrice"> 株価と利回りを載せない</label>
+    <label class="share-opt"><input type="checkbox" id="shareShowUrl"> アプリのURLを載せる(載せないと「何のアプリ?」と聞かれやすい)</label>
     <div class="share-previews" id="sharePreviews"></div>
     <p class="hint" id="shareText"></p>
     <div class="share-btns">
@@ -1845,11 +1846,26 @@
     p.txt(p.fit(name || code || "銘柄", "800", small ? 52 : 68, SR - SX), SX, small ? 214 : 232, "800", small ? 52 : 68, SC.text);
     return small ? 250 : 272;
   }
+  // 下: アプリのアイコンと名前(「何のアプリ?」と聞かれるように)。URLは選んだときだけ
+  var shareIcon = null;
+  function loadShareIcon() {
+    if (shareIcon) return Promise.resolve(shareIcon);
+    return new Promise(function (res) {
+      var im = new Image();
+      im.onload = function () { shareIcon = im; res(im); };
+      im.onerror = function () { res(null); };
+      im.src = "icon-192.png";
+    });
+  }
   function shareFoot(p, page, total) {
-    p.hline(p.H - 132);
-    p.txt("EDINETの有価証券報告書をもとに作成。投資の判断はご自身で。", SX, p.H - 88, "500", 21, SC.sub);
-    p.txt(SHARE_URL, SX, p.H - 54, "700", 22, SC.text);
-    if (total > 1) p.txt(page + " / " + total, SR, p.H - 54, "700", 22, SC.faint, "right");
+    var showUrl = document.getElementById("shareShowUrl").checked, y0 = p.H - 132;
+    p.hline(y0);
+    var tx = SX;
+    if (shareIcon) { p.g.save(); p.rr(SX, y0 + 28, 64, 64, 16, "#000"); p.g.clip(); p.g.drawImage(shareIcon, SX, y0 + 28, 64, 64); p.g.restore(); tx = SX + 84; }
+    p.txt("高配当株チェックシート", tx, y0 + 56, "800", 28, SC.text);
+    p.txt(showUrl ? SHARE_URL : "有価証券報告書から10項目を自動で採点", tx, y0 + 88, "500", 20, SC.sub);
+    p.txt("出典 EDINET ・ 投資の判断はご自身で", SR, y0 + 88, "500", 17, SC.faint, "right");
+    if (total > 1) p.txt(page + " / " + total, SR, y0 + 56, "700", 22, SC.faint, "right");
   }
   function shareCtx() {
     var code = curCode(), a = state.auto && state.auto.code === code ? state.auto : null;
@@ -2188,7 +2204,7 @@
     var s = summarize(), code = curCode(), name = (state.subject.name || "").normalize("NFKC");
     return (code + " " + name).trim() + " 高配当株チェック ◎" + s.counts.good + " ○" + s.counts.ok + " △" + s.counts.mid + " ❌" + s.counts.bad +
       " ・ 重要項目 " + s.starPassing + "/" + s.starTotal + "\n#高配当株" + (name ? " #" + name.replace(/[\s・()()]/g, "") : "") +
-      "\nhttps://" + SHARE_URL + "/" + (code ? "?code=" + encodeURIComponent(code) : "");
+      (document.getElementById("shareShowUrl").checked ? "\nhttps://" + SHARE_URL + "/" + (code ? "?code=" + encodeURIComponent(code) : "") : "");
   }
   function paintShare() {
     var pages = shareMode === "one" ? [drawSummary(1640, 58, true, false)]
@@ -2208,6 +2224,7 @@
     if (!curCode()) { setStatus("証券コードを入れてから作ってください。"); return; }
     document.getElementById("shareDialog").showModal();
     paintShare();
+    loadShareIcon().then(function (im) { if (im) paintShare(); });
     if (document.fonts && document.fonts.load) Promise.all([document.fonts.load('700 40px "Noto Sans JP"'), document.fonts.load('500 28px "Noto Sans JP"')]).then(paintShare, function () {});
   }
   function shareFiles() {
@@ -2223,6 +2240,7 @@
   }
   document.getElementById("shareBtn").addEventListener("click", openShare);
   document.getElementById("shareHidePrice").addEventListener("change", paintShare);
+  document.getElementById("shareShowUrl").addEventListener("change", paintShare);
   document.getElementById("shareModes").addEventListener("click", function (e) {
     var b = e.target.closest("[data-mode]"); if (!b) return;
     shareMode = b.dataset.mode;
