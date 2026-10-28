@@ -558,7 +558,7 @@
       <b>⑥増配を目指すと明記</b>・<b>導入を検討中</b>(これだけで★★): 有報の配当政策にそう書いている。</p>
     <p><span class="note-label">反映の時期</span>有報は年1回、決算から約3か月後に出ます。決算短信や中期経営計画で新しく宣言した会社は、次の有報が出るまでここに載りません。
       数字は毎週、新しく提出された有報で更新しています(<span id="built"></span>)。</p>
-    <p><span class="note-label">株価</span>「株価・予想を見る」で開いたYahoo!ファイナンスの参考指標の欄の色の付いた所(「配当利回り」から「BPS」まで)をコピーして戻ると、株価と予想配当が入ります。株価だけのコピーでもかまいません。入れた値はこの端末に保存し、チェックシートでも使います。</p>
+    <p><span class="note-label">株価</span>「株価・予想を見る」で開いたYahoo!ファイナンスの参考指標の欄の色の付いた所(「発行済株式数」から「BPS」まで)をコピーして戻ると、株価と予想配当が入ります。項目名の文字はリンクのことがあるので、右側の数字(発行済株式数の「○○株」)を長押しして選び始めると確実です。株価だけのコピーでもかまいません。入れた値はこの端末に保存し、チェックシートでも使います。</p>
     <p><span class="note-label">出典</span><a href="https://disclosure2.edinet-fsa.go.jp/" target="_blank" rel="noopener noreferrer">EDINET</a>の有価証券報告書をもとに当サイトが加工して作成しています
       (<a href="https://www.digital.go.jp/resources/open_data/public_data_license_v1.0" target="_blank" rel="noopener noreferrer">公共データ利用規約 第1.0版</a>)。
       1株配当は株式分割を割り戻しています。特定の銘柄の売買を勧めるものではありません。投資判断は自己責任で行ってください。</p>
@@ -1975,9 +1975,10 @@
     if (!(price > 0) || isNaN(fe)) return "";
     return fe > 0 ? "<br>予想PER <b>" + (price / fe).toFixed(1) + "倍</b>(株価 ÷ 会社予想の1株利益 " + fe + "円)" : "<br>予想PER <b>―</b>(会社予想は赤字)";
   }
-  // 開いたときに参考指標の欄の配当利回りまで送り、BPSまで(1画面に収まる範囲)を色付けする(Safari・Chromeのテキストフラグメント)
+  // 開いたときに参考指標の欄の発行済株式数まで送り、BPSまで(1画面に収まる範囲)を色付けする。
+  // 「配当利回り」の文字はリンクで、長押しすると別のページに行ってしまうので、その1行上(リンクでない)から始める(Safari・Chromeのテキストフラグメント)
   function yahooUrl(code) {
-    return "https://finance.yahoo.co.jp/quote/" + encodeURIComponent(code) + ".T#:~:text=" + encodeURIComponent("配当利回り") + "," + encodeURIComponent("BPS");
+    return "https://finance.yahoo.co.jp/quote/" + encodeURIComponent(code) + ".T#:~:text=" + encodeURIComponent("発行済株式数") + "," + encodeURIComponent("BPS");
   }
   window.irYahooUrl = yahooUrl;
   // 株主優待の有無。HAITO(同じサイト)が有報の「株主に対する特典」から作った表を読む
@@ -2135,7 +2136,7 @@
         var blk = t && t.length > 40 ? parseQuoteBlock(t) : null;
         if (blk) { applyQuoteBlock(blk); return; }
         // 長い文字なのに参考指標として読めないときは、最初の数字(時価総額など)を株価にしない
-        if (t && t.length > 40) { setStatus("コピーした内容から株価・予想配当を読み取れませんでした(" + t.length + "文字)。「配当利回り」から「BPS」まで(色の付いた所)を選んでコピーし直してください。"); return; }
+        if (t && t.length > 40) { setStatus("コピーした内容から株価・予想配当を読み取れませんでした(" + t.length + "文字)。「発行済株式数」から「BPS」まで(色の付いた所)を選んでコピーし直してください。"); return; }
         var p = parsePrice(t);
         if (p) setPrice(p); else { input.focus(); setStatus("コピーした内容に株価が見つかりませんでした。"); }
       }, function () { input.focus(); setStatus("株価の欄を長押しして貼り付けてください。"); });
@@ -2793,7 +2794,7 @@
       navigator.clipboard.readText().then(function (t) {
         var b = quoteOf(t);
         if (b) { applyQuote(row, b); return; }
-        if (t && t.length > 40) { toast("コピーした内容から株価・予想配当を読み取れませんでした。「配当利回り」から「BPS」まで(色の付いた所)をコピーし直してください"); return; }
+        if (t && t.length > 40) { toast("コピーした内容から株価・予想配当を読み取れませんでした。「発行済株式数」から「BPS」まで(色の付いた所)をコピーし直してください"); return; }
         if (parsePrice(t)) { applyPrice(row, t); row.classList.remove("is-waiting"); try { sessionStorage.removeItem(WAIT_KEY); } catch (x) {} }
         else input.focus();
       }, function () { input.focus(); });
