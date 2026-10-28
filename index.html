@@ -233,6 +233,13 @@
   .target-row label { display: flex; align-items: center; gap: 6px; font-size: 13px; font-weight: 700; }
   .target-row input { width: 4.5em; padding: 8px 10px; font: inherit; font-size: 15px; text-align: right; border: 1px solid var(--line); border-radius: 10px; background: var(--field, transparent); color: inherit; }
   .target-hint { font-size: 12px; color: var(--text-2); }
+  .share-dialog { border: 0; border-radius: var(--radius-lg); padding: 18px; width: min(440px, calc(100vw - 32px)); background: var(--card); color: var(--text); box-shadow: var(--shadow); }
+  .share-dialog::backdrop { background: rgba(20, 24, 32, .45); }
+  .share-dialog h3 { margin: 0 0 4px; font-size: 17px; }
+  .share-dialog .hint { font-size: 12.5px; color: var(--text-2); margin: 4px 0 8px; overflow-wrap: anywhere; }
+  .share-opt { display: flex; gap: 6px; align-items: center; font-size: 13px; margin-bottom: 8px; }
+  .share-preview { display: block; width: 100%; border-radius: 12px; border: 1px solid var(--line); background: #fff; }
+  .share-btns { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px; }
   .toolbar-sub { flex-basis: 100%; display: flex; flex-wrap: wrap; gap: 4px 16px; }
   .toolbar-sub button { background: none; border: 0; padding: 6px 0; font: inherit; font-size: 12.5px; color: var(--text-2); text-decoration: underline; text-underline-offset: 3px; cursor: pointer; }
 
@@ -609,11 +616,25 @@
       <span class="toolbar-status" id="toolbarStatus"></span>
       <div class="toolbar-sub">
         <button type="button" id="saveBtn">候補に入れずに保存</button>
+        <button type="button" id="shareBtn">SNS用の画像</button>
         <button type="button" id="copyBtn">Markdownでコピー</button>
         <button type="button" id="resetBtn">入力をクリア</button>
       </div>
     </div>
   </section>
+
+  <dialog class="share-dialog" id="shareDialog">
+    <h3>SNS用の画像</h3>
+    <p class="hint">採点の結果をそのまま載せられる画像です。</p>
+    <label class="share-opt"><input type="checkbox" id="shareHidePrice"> 株価と利回りを載せない</label>
+    <img class="share-preview" id="sharePreview" alt="チェックシートの採点の画像">
+    <p class="hint" id="shareText"></p>
+    <div class="share-btns">
+      <button type="button" class="btn primary" id="shareGo">共有する</button>
+      <button type="button" class="btn" id="shareSave">画像を保存</button>
+      <button type="button" class="btn" id="shareClose">閉じる</button>
+    </div>
+  </dialog>
 
   <section class="panel" data-view="saved">
     <h2><span class="chap">四</span>保存した評価</h2>
@@ -1776,6 +1797,135 @@
     }
     return lines.join("\n");
   }
+
+
+  // ---------- SNS用の画像 ----------
+  // 採点の結果(◎○△❌・10項目・利回り・1株配当の推移)を縦長の画像にする。色は画面のダークモードに関係なく明るい配色で固定
+  var SHARE_URL = "82706991hiroto-ship-it.github.io/ir-check";
+  var shareBlob = null;
+  function shareFileName() { return "ir-check-" + (curCode() || "check") + "-" + todayStamp() + ".png"; }
+  function shareCaption() {
+    var s = summarize(), code = curCode(), name = (state.subject.name || "").normalize("NFKC");
+    return (code + " " + name).trim() + " 高配当株チェック ◎" + s.counts.good + " ○" + s.counts.ok + " △" + s.counts.mid + " ❌" + s.counts.bad +
+      " ・ 重要項目 " + s.starPassing + "/" + s.starTotal + "\n#高配当株" + (name ? " #" + name.replace(/[\s・()()]/g, "") : "") +
+      "\nhttps://" + SHARE_URL + "/" + (code ? "?code=" + encodeURIComponent(code) : "");
+  }
+  function paintShare() {
+    var W = 1080, H = 1640, c = document.createElement("canvas");
+    c.width = W; c.height = H;
+    var g = c.getContext("2d"), F = '"Noto Sans JP", "Hiragino Sans", sans-serif';
+    var C = { page: "#f6f7fb", card: "#ffffff", text: "#23282e", sub: "#5f6b7a", line: "#e5e8ef", field: "#f3f5f9",
+              accent: "#e8543f", accentSoft: "#fdeeeb", good: "#16a34a", ok: "#2563eb", mid: "#d97706", bad: "#dc2626", none: "#97a0ad" };
+    var LV = { good: C.good, ok: C.ok, mid: C.mid, bad: C.bad, none: C.none };
+    var MK = { good: "◎", ok: "○", mid: "△", bad: "×", none: "—" };
+    function font(w, px) { g.font = w + " " + px + "px " + F; }
+    function txt(t, x, y, w, px, color, align) { font(w, px); g.fillStyle = color; g.textAlign = align || "left"; g.fillText(t, x, y); }
+    function fit(t, w, px, maxW) { font(w, px); while (t.length > 1 && g.measureText(t).width > maxW) t = t.slice(0, -2) + "…"; return t; }
+    function rr(x, y, w, h, r, color) { g.beginPath(); g.moveTo(x + r, y); g.arcTo(x + w, y, x + w, y + h, r); g.arcTo(x + w, y + h, x, y + h, r); g.arcTo(x, y + h, x, y, r); g.arcTo(x, y, x + w, y, r); g.closePath(); g.fillStyle = color; g.fill(); }
+    g.fillStyle = C.page; g.fillRect(0, 0, W, H);
+    rr(40, 40, W - 80, H - 80, 36, C.card);
+    var s = summarize(), code = curCode(), name = (state.subject.name || "").normalize("NFKC");
+    var a = state.auto && state.auto.code === code ? state.auto : null, rec = a ? a.rec : null;
+    var X = 96, R = W - 96;
+    txt("高配当株チェック", X, 128, "700", 30, C.accent);
+    txt(todayStamp().replace(/-/g, "/") + " 時点", R, 128, "500", 26, C.sub, "right");
+    txt(fit((code + " " + name).trim() || "銘柄", "700", 60, R - X), X, 210, "700", 60, C.text);
+    var fyTxt = a && a.fy ? String(a.fy).replace(/^(\d{4})-(\d{2}).*$/, function (_, y, m) { return y + "年" + (+m) + "月期"; }) : "";
+    if (rec && rec.sec) txt(rec.sec + (fyTxt ? " ・ " + fyTxt + "の有価証券報告書で採点" : ""), X, 258, "500", 26, C.sub);
+    // 判定
+    var verdict = s.counts.bad > 0 ? ["基準を外れた項目 " + s.counts.bad, C.bad, "#fdecec"] : s.starPassing === s.starTotal && s.starTotal > 0 ? ["基準内", C.good, "#e9f7ef"] : ["要確認", C.mid, "#fdf2e3"];
+    var y = 300;
+    rr(X, y, R - X, 150, 24, C.field);
+    font("700", 30); var vw = g.measureText(verdict[0]).width + 48;
+    rr(X + 28, y + 28, vw, 52, 26, verdict[2]); txt(verdict[0], X + 28 + vw / 2, y + 65, "700", 30, verdict[1], "center");
+    txt("重要項目(★)  " + s.starPassing + " / " + s.starTotal + " が◎○", X + 28, y + 122, "500", 28, C.sub);
+    var cx = R - 28, parts = [["×", s.counts.bad, C.bad], ["△", s.counts.mid, C.mid], ["○", s.counts.ok, C.ok], ["◎", s.counts.good, C.good]];
+    parts.forEach(function (p) { txt(String(p[1]), cx, y + 108, "700", 64, p[2], "right"); font("700", 64); var w1 = g.measureText(String(p[1])).width; txt(p[0], cx - w1 - 8, y + 104, "700", 40, p[2], "right"); font("700", 40); cx -= w1 + 8 + g.measureText(p[0]).width + 34; });
+    y += 180;
+    // 利回り
+    var hide = document.getElementById("shareHidePrice").checked;
+    var price = parseFloat(state.subject.price), fdiv = parseFloat(state.subject.fdiv);
+    var div = rec && rec.div ? rec.div[rec.div.length - 1] : null;
+    if (!hide && price > 0 && (fdiv > 0 || div > 0)) {
+      var tiles = [];
+      if (fdiv > 0) tiles.push(["配当利回り(予想)", (fdiv / price * 100).toFixed(2) + "%", true]);
+      if (div > 0) tiles.push(["配当利回り(実績)", (div / price * 100).toFixed(2) + "%", !(fdiv > 0)]);
+      var pf = perkNow && perkNow.code === code ? perkNow.f : null;
+      if (Array.isArray(pf) && pf.length) tiles.push(["優待込み", ((fdiv > 0 ? fdiv : div) / price * 100 + pf[0][1] / (pf[0][0] * price) * 100).toFixed(2) + "%", false]);
+      var tw = (R - X - 20 * (tiles.length - 1)) / tiles.length;
+      tiles.forEach(function (t, i) {
+        var tx = X + i * (tw + 20);
+        rr(tx, y, tw, 120, 22, t[2] ? C.accentSoft : C.field);
+        txt(t[0], tx + 24, y + 42, "500", 24, C.sub);
+        txt(t[1], tx + 24, y + 98, "700", 46, t[2] ? C.accent : C.text);
+      });
+      txt("株価 " + price.toLocaleString("ja-JP") + "円で計算", R, y + 152, "500", 22, C.sub, "right");
+      y += 176;
+    }
+    // 10項目
+    txt("10項目の判定", X, y + 20, "700", 30, C.text);
+    y += 44;
+    var rows = s.results, rowH = 56;
+    rows.forEach(function (r, i) {
+      var ry = y + i * rowH;
+      if (i % 2 === 0) rr(X - 12, ry + 4, R - X + 24, rowH - 4, 12, "#f8f9fc");
+      var mid = ry + rowH / 2 + 12;
+      txt(MK[r.level], X + 8, mid, "700", 34, LV[r.level]);
+      txt(fit(r.item.name + (r.item.star ? " ★" : ""), "500", 28, 440), X + 70, mid, "500", 28, C.text);
+      txt(fit(labelOf(r.item, r.value) || "—", "700", 28, R - X - 540), R - 8, mid, "700", 28, r.level === "none" ? C.none : C.text, "right");
+    });
+    y += rows.length * rowH + 30;
+    // 1株配当の推移(最大10期)
+    var ds = rec ? (rec.dl && rec.dl.length > (rec.div || []).length ? rec.dl : rec.div) : null;
+    if (ds && ds.length >= 2) {
+      ds = ds.slice(-10);
+      var top = Math.max.apply(null, ds) || 1, bh = Math.min(220, H - 170 - y - 40), bw = (R - X) / ds.length;
+      txt("1株配当の推移(直近" + ds.length + "期)", X, y + 10, "700", 26, C.text);
+      ds.forEach(function (v, i) {
+        var h1 = Math.max(4, (v / top) * (bh - 30)), bx = X + i * bw + bw * 0.18;
+        var down = i > 0 && v < ds[i - 1] - 0.005;
+        rr(bx, y + 30 + (bh - 30 - h1) + 10, bw * 0.64, h1, 6, down ? C.bad : C.ok);
+      });
+      txt(String(ds[ds.length - 1]) + "円", R, y + 10, "700", 26, C.ok, "right");
+    }
+    // 下の注記
+    g.fillStyle = C.line; g.fillRect(X, H - 150, R - X, 2);
+    txt("EDINETの有価証券報告書をもとに作成 ・ 投資の判断はご自身で", X, H - 106, "500", 22, C.sub);
+    txt(SHARE_URL, X, H - 72, "700", 24, C.accent);
+    c.toBlob(function (b) {
+      shareBlob = b;
+      document.getElementById("sharePreview").src = URL.createObjectURL(b);
+    }, "image/png");
+    document.getElementById("shareText").textContent = "投稿の文面: " + shareCaption().replace(/\n/g, " ");
+  }
+  function openShare() {
+    if (!curCode()) { setStatus("証券コードを入れてから作ってください。"); return; }
+    document.getElementById("shareDialog").showModal();
+    paintShare();
+    if (document.fonts && document.fonts.load) Promise.all([document.fonts.load('700 40px "Noto Sans JP"'), document.fonts.load('500 28px "Noto Sans JP"')]).then(paintShare, function () {});
+  }
+  function saveShare() {
+    if (!shareBlob) return;
+    var a = document.createElement("a");
+    a.href = URL.createObjectURL(shareBlob); a.download = shareFileName();
+    document.body.appendChild(a); a.click(); a.remove();
+  }
+  document.getElementById("shareBtn").addEventListener("click", openShare);
+  document.getElementById("shareHidePrice").addEventListener("change", paintShare);
+  document.getElementById("shareSave").addEventListener("click", saveShare);
+  document.getElementById("shareClose").addEventListener("click", function () { document.getElementById("shareDialog").close(); });
+  document.getElementById("shareGo").addEventListener("click", function () {
+    var msg = shareCaption();
+    var file = shareBlob ? new File([shareBlob], shareFileName(), { type: "image/png" }) : null;
+    if (file && navigator.canShare && navigator.canShare({ files: [file] })) {
+      navigator.share({ files: [file], text: msg }).catch(function () {});
+    } else {
+      // PCなど画像付きで共有できない環境では、画像を保存して文面をコピーする
+      saveShare();
+      if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(msg).catch(function () {});
+      document.getElementById("shareText").textContent = "この端末では画像付きで共有できないため、画像を保存し、投稿の文面をコピーしました。";
+    }
+  });
 
   document.getElementById("copyBtn").addEventListener("click", function () {
     var md = buildMarkdown();
