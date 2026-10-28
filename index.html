@@ -1986,7 +1986,14 @@
       else if (!f) html = '<b>株主優待</b> <span class="pk-no">なし</span>';
       else {
         var tiers = Array.isArray(f) ? f.map(function (t) { return t[0].toLocaleString("ja-JP") + "株で年" + t[1].toLocaleString("ja-JP") + "円相当"; }).join("・") : "";
-        html = '<b>株主優待</b> <span class="pk-yes">あり</span>' + (tiers ? "(" + tiers + ")" : "") +
+        // 優待利回りと総合利回り(配当＋優待)。優待がもらえる一番少ない株数で見る
+        var price = parseFloat(state.subject.price), fdiv = parseFloat(state.subject.fdiv), py = "";
+        if (Array.isArray(f) && f.length && price > 0) {
+          var pk = f[0][1] / (f[0][0] * price) * 100;
+          py = '<br><span class="pk-yield">' + f[0][0].toLocaleString("ja-JP") + "株で優待利回り " + pk.toFixed(2) + "%" +
+            (fdiv > 0 ? " ・ 配当と合わせた総合利回り <b>" + (fdiv / price * 100 + pk).toFixed(2) + "%</b>" : "") + "</span>";
+        }
+        html = '<b>株主優待</b> <span class="pk-yes">あり</span>' + (tiers ? "(" + tiers + ")" : "") + py +
           (d.text ? '<details><summary>内容(有報の「株主に対する特典」)</summary><p>' + escapeHtml(d.text) + '</p></details>' : "");
       }
       box.innerHTML = html; box.hidden = false;
