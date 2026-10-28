@@ -46,11 +46,14 @@ jobs:
       # データどうしの食い違いは checks.json に書き、アプリに「数字を要確認」と出す
       - name: 数字の点検
         run: python3 tools/check_data.py --haito haito/index.html
+      # 予備軍・実績の一覧を月に1回残す(あとで「ほんとうに累進配当・DOEを宣言したか」を数えるため)
+      - name: 予備軍・実績の一覧を記録
+        run: python3 tools/cand_track.py snapshot
       - name: 変わっていればコミットして公開
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          git add fin policy.json checks.json
+          git add fin policy.json checks.json history
           if git diff --cached --quiet; then echo "変更なし"; exit 0; fi
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
