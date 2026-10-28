@@ -2019,6 +2019,170 @@
     });
     return [p];
   }
+  // 「詳しく」: 10項目を2枚に分ける。1枚目 判定・利回り＋業績と財務(売上高〜現金等の6項目、推移は折れ線)、
+  // 2枚目 配当と株価(1株配当は棒グラフ、配当性向は棒と1株利益の線、PBR、ROE)＋配当方針の宣言・優待の印
+  function itemRow(p, r, y, h, k, chart, sub) {
+    var mid = y + 40;
+    p.txt(SMK[r.level], SX + 2, mid + 1, "700", 32, SLV[r.level]);
+    var nm = r.item.name.replace(/\(.*?\)/g, "") + (r.item.star ? " ★" : "");
+    p.txt(nm, SX + 56, mid, "700", 28, SC.text);
+    if (sub) { p.font("700", 28); p.txt(sub, SX + 56 + p.g.measureText(nm).width + 16, mid, "500", 20, SC.faint); }
+    var val = p.fit(labelOf(r.item, r.value) || "—", "800", 30, 330);
+    p.txt(val, SR, mid, "800", 30, r.level === "none" ? SC.faint : SC.text, "right");
+    var ev0 = k.a && k.a.ev[r.item.key], sn = k.a && sectorNote(k.rec && k.rec.sec, r.item.key);
+    var why = ev0 && ev0.reason ? String(ev0.reason).split("。")[0] : "";
+    if (sn) why = "業種の目安 " + sn.how.replace(/ で判定$/, "").replace(/❌/g, "×") + (why ? " ・ " + why : "");
+    if (chart) chart(SX + 56, mid + 18, SR - SX - 56, h - 62);
+    else if (why) p.txt(p.fit(why, "500", 21, SR - SX - 56), SX + 56, mid + 36, "500", 21, SC.faint);
+    p.g.fillStyle = SC.line; p.g.fillRect(SX, y + h, SR - SX, 1.5);
+  }
+  // 行の下に置く横長の折れ線(グラフの青・薄い塗り・最新の期に点、右に最初の期からの変化)
+  function lineChart(p, r, ser, x, y, w, h) {
+    var mn = Math.min.apply(null, ser), mx = Math.max.apply(null, ser);
+    if (mx === mn) mx = mn + 1;
+    var lw = w - 120, yv = function (v) { return y + h - 4 - (v - mn) / (mx - mn) * (h - 10); };
+    var stp = (lw - 8) / (ser.length - 1), g = p.g, xs = ser.map(function (v, j) { return x + 4 + j * stp; });
+    g.beginPath(); g.moveTo(xs[0], y + h);
+    ser.forEach(function (v, j) { g.lineTo(xs[j], yv(v)); });
+    g.lineTo(xs[xs.length - 1], y + h); g.closePath(); g.fillStyle = SC.chartSoft; g.fill();
+    if (mn < 0 && mx > 0) { g.save(); g.strokeStyle = SC.faint; g.setLineDash([4, 4]); g.lineWidth = 2; g.beginPath(); g.moveTo(x, yv(0)); g.lineTo(x + lw, yv(0)); g.stroke(); g.restore(); }
+    g.strokeStyle = SC.chart; g.lineWidth = 3.5; g.lineJoin = "round"; g.lineCap = "round"; g.beginPath();
+    ser.forEach(function (v, j) { if (j) g.lineTo(xs[j], yv(v)); else g.moveTo(xs[j], yv(v)); });
+    g.stroke();
+    ser.forEach(function (v, j) { g.beginPath(); g.arc(xs[j], yv(v), j === ser.length - 1 ? 6.5 : 3.5, 0, Math.PI * 2); g.fillStyle = SC.chart; g.fill(); });
+    var f0 = ser[0], f1 = ser[ser.length - 1], isRatio = r.item.key === "equity" || r.item.key === "roe";
+    var chg = isRatio ? (f1 - f0) * 100 : f0 > 0 && f1 > 0 ? (f1 / f0 - 1) * 100 : null;
+    p.txt(ser.length + "期", x + w, y + h / 2 - 6, "500", 19, SC.faint, "right");
+    if (chg !== null) {
+      var ct = Math.abs(chg) < 0.5 ? "±0" + (isRatio ? "pt" : "%") : (chg > 0 ? "+" : "−") + Math.abs(chg).toFixed(isRatio ? 1 : 0) + (isRatio ? "pt" : "%");
+      p.txt(ct, x + w, y + h / 2 + 22, "800", 24, chg <= -0.5 ? SC.bad : SC.text, "right");
+    }
+  }
+  // 1行に収める行: 名前 | 小さな折れ線 | 値(下に最初の期からの変化)。折れ線が無い項目は真ん中に根拠の一文
+  function inlineRow(p, r, y, h, k, ser) {
+    var mid = y + h / 2 + 10;
+    p.txt(SMK[r.level], SX + 2, mid + 1, "700", 32, SLV[r.level]);
+    p.txt(p.fit(r.item.name.replace(/\(.*?\)/g, "") + (r.item.star ? " ★" : ""), "700", 28, 250), SX + 56, mid, "700", 28, SC.text);
+    var gx = SX + 330, gw = 300, raw = labelOf(r.item, r.value) || "—";
+    // 長い判定(毎年黒字で増加傾向 など)は切らずに少し小さくする
+    p.font("800", 28); var vf = p.g.measureText(raw).width > SR - gx - gw - 20 ? 23 : 28;
+    var val = p.fit(raw, "800", vf, SR - gx - gw - 16);
+    if (ser && ser.length >= 2) {
+      var mn = Math.min.apply(null, ser), mx = Math.max.apply(null, ser);
+      if (mx === mn) mx = mn + 1;
+      var top = y + 14, ch = h - 28, yv = function (v) { return top + ch - (v - mn) / (mx - mn) * ch; };
+      var stp = (gw - 12) / (ser.length - 1), g = p.g, xs = ser.map(function (v, j) { return gx + 6 + j * stp; });
+      g.beginPath(); g.moveTo(xs[0], top + ch + 6);
+      ser.forEach(function (v, j) { g.lineTo(xs[j], yv(v)); });
+      g.lineTo(xs[xs.length - 1], top + ch + 6); g.closePath(); g.fillStyle = SC.chartSoft; g.fill();
+      if (mn < 0 && mx > 0) { g.save(); g.strokeStyle = SC.faint; g.setLineDash([4, 4]); g.lineWidth = 2; g.beginPath(); g.moveTo(gx, yv(0)); g.lineTo(gx + gw, yv(0)); g.stroke(); g.restore(); }
+      g.strokeStyle = SC.chart; g.lineWidth = 3.5; g.lineJoin = "round"; g.lineCap = "round"; g.beginPath();
+      ser.forEach(function (v, j) { if (j) g.lineTo(xs[j], yv(v)); else g.moveTo(xs[j], yv(v)); });
+      g.stroke();
+      ser.forEach(function (v, j) { g.beginPath(); g.arc(xs[j], yv(v), j === ser.length - 1 ? 6.5 : 3.5, 0, Math.PI * 2); g.fillStyle = SC.chart; g.fill(); });
+      var f0 = ser[0], f1 = ser[ser.length - 1], isRatio = r.item.key === "equity" || r.item.key === "roe";
+      var chg = isRatio ? (f1 - f0) * 100 : f0 > 0 && f1 > 0 ? (f1 / f0 - 1) * 100 : null;
+      p.txt(val, SR, mid - 10, "800", vf, SC.text, "right");
+      if (chg !== null) {
+        var ct = Math.abs(chg) < 0.5 ? "±0" + (isRatio ? "pt" : "%") : (chg > 0 ? "+" : "−") + Math.abs(chg).toFixed(isRatio ? 1 : 0) + (isRatio ? "pt" : "%");
+        p.txt(ser.length + "期で " + ct, SR, mid + 22, "700", 20, chg <= -0.5 ? SC.bad : SC.sub, "right");
+      }
+    } else {
+      p.txt(val, SR, mid, "800", vf, r.level === "none" ? SC.faint : SC.text, "right");
+      var ev0 = k.a && k.a.ev[r.item.key], sn = k.a && sectorNote(k.rec && k.rec.sec, r.item.key);
+      var why = sn ? "業種の目安 " + sn.how.replace(/ で判定$/, "").replace(/❌/g, "×") : ev0 && ev0.reason ? String(ev0.reason).split("。")[0] : "";
+      p.font("800", vf); var vw = p.g.measureText(val).width;
+      if (why) p.txt(p.fit(why, "500", 20, SR - vw - 30 - gx), gx, mid - 1, "500", 20, SC.faint);
+    }
+    p.g.fillStyle = SC.line; p.g.fillRect(SX, y + h, SR - SX, 1.5);
+  }
+  function sectionTitle(p, y, t) {
+    p.txt(t, SX, y, "800", 26, SC.text);
+    p.g.fillStyle = SC.accent; p.g.fillRect(SX, y + 12, 36, 4);
+    return y + 30;
+  }
+  function drawPage1() {
+    var p = sharePage(1350), k = shareCtx(), a = k.a, rec = k.rec;
+    var y = shareHead(p, false);
+    var fyT = fyText(a && a.fy);
+    if (fyT) p.txt(fyT + "の有価証券報告書で採点", SX, y + 6, "500", 22, SC.faint);
+    y = verdictBlock(p, y + 30);
+    p.hline(y);
+    var y2 = yieldBlock(p, y + 28, k.code, rec);
+    if (y2 > y + 28) { y = y2; p.hline(y); }
+    y = sectionTitle(p, y + 56, "業績と財務") + 4;
+    var rows = k.s.results.filter(function (r) { return ["sales", "eps", "opm", "equity", "cf", "cash"].indexOf(r.item.key) !== -1; });
+    var h = Math.min(96, (1350 - 160 - y) / rows.length);
+    rows.forEach(function (r, i) {
+      var ev0 = a && a.ev[r.item.key], ser = ev0 && ev0.series ? ev0.series.filter(function (v) { return v != null; }) : null;
+      inlineRow(p, r, y + i * h, h, k, ser);
+    });
+    return p;
+  }
+  function drawPage2() {
+    var p = sharePage(1350), k = shareCtx(), a = k.a, rec = k.rec;
+    var y = shareHead(p, true);
+    y = sectionTitle(p, y + 56, "配当と株価") + 4;
+    var get = function (key) { return k.s.results.filter(function (r) { return r.item.key === key; })[0]; };
+    // 1株配当: 最大14期＋会社予想。減配は赤、最新の実績は濃い青、予想は薄い青
+    var rd = get("dividend");
+    if (rd) itemRow(p, rd, y, 320, k, rec && rec.div && rec.fy ? function (x, cy, w, ch) {
+      var ds = rec.dl && rec.dl.length > rec.div.length ? rec.dl : rec.div, fd = parseFloat(state.subject.fdiv);
+      var labels = fyLabels(rec.fy, ds.length), vals = ds.slice();
+      if (fd > 0) { vals.push(fd); labels.push(shiftFy(rec.fy, 1).slice(2, 4) + "/" + (+rec.fy.slice(5, 7)) + "予"); }
+      var top = Math.max.apply(null, vals) || 1, bw = w / vals.length, base = cy + ch - 26;
+      vals.forEach(function (v, i) {
+        var h1 = Math.max(3, v / top * (ch - 62)), bx = x + i * bw + bw * 0.2, fc = fd > 0 && i === vals.length - 1;
+        var down = i > 0 && v < vals[i - 1] - 0.005, lastA = i === vals.length - (fd > 0 ? 2 : 1);
+        p.rr(bx, base - h1, bw * 0.6, h1, 4, fc ? SC.chartSoft : down ? SC.bad : lastA ? SC.chart : "#9db8f2");
+        if (i === 0 || lastA || fc) p.txt(String(v), bx + bw * 0.3, base - h1 - 8, "700", 19, fc ? SC.sub : SC.text, "center");
+        if (vals.length <= 10 || i % 2 === (vals.length - 1) % 2) p.txt(labels[i], bx + bw * 0.3, base + 24, "500", 17, SC.faint, "center");
+      });
+    } : null);
+    y += 320;
+    // 配当性向: 棒(%)と1株利益の線(5期)
+    var rp = get("payout");
+    var e = rec && rec.eps ? rec.eps : [], d5 = rec && rec.div ? rec.div.slice(-e.length) : [], n = Math.min(e.length, d5.length);
+    if (rp) itemRow(p, rp, y, 270, k, n >= 2 ? function (x, cy, w, ch) {
+      e = e.slice(-n); d5 = d5.slice(-n);
+      var po = d5.map(function (v, i) { return e[i] > 0 ? v / e[i] * 100 : 0; }), lab = fyLabels(rec.fy, n);
+      var bw2 = w / n, base2 = cy + ch - 26, pTop = Math.max(60, Math.max.apply(null, po)), barZone = (ch - 40) * 0.5;
+      var lineTop = cy + 30, lineBot = base2 - barZone - 44;
+      var eLo = Math.min.apply(null, e.map(function (v) { return Math.max(0, v); })) * 0.8, eHi = Math.max.apply(null, e) || 1;
+      var epsY = function (v) { return lineBot - (Math.max(0, v) - eLo) / ((eHi - eLo) || 1) * (lineBot - lineTop); };
+      po.forEach(function (v, i) {
+        var h1 = Math.max(3, v / pTop * barZone), bx = x + i * bw2 + bw2 * 0.28;
+        p.rr(bx, base2 - h1, bw2 * 0.44, h1, 4, SC.chartSoft);
+        p.txt(v.toFixed(0) + "%", bx + bw2 * 0.22, base2 - h1 - 8, "700", 20, SC.text, "center");
+        p.txt(lab[i], bx + bw2 * 0.22, base2 + 24, "500", 17, SC.faint, "center");
+      });
+      var g = p.g; g.strokeStyle = SC.chart; g.lineWidth = 3; g.lineJoin = "round"; g.beginPath();
+      e.forEach(function (v, i) { var px = x + i * bw2 + bw2 / 2, py = epsY(v); if (i) g.lineTo(px, py); else g.moveTo(px, py); });
+      g.stroke();
+      e.forEach(function (v, i) {
+        var px = x + i * bw2 + bw2 / 2, py = epsY(v);
+        g.beginPath(); g.arc(px, py, 5, 0, Math.PI * 2); g.fillStyle = SC.chart; g.fill();
+        p.txt(String(v), px, py - 14, "500", 17, SC.sub, "center");
+      });
+    } : null, "棒 = 配当性向 ・ 線 = 1株利益(円)");
+    y += 270;
+    var rb = get("pbr");
+    if (rb) { inlineRow(p, rb, y, 80, k, null); y += 80; }
+    var rr2 = get("roe"), ser = rr2 && a && a.ev.roe && a.ev.roe.series ? a.ev.roe.series.filter(function (v) { return v != null; }) : null;
+    if (rr2) { inlineRow(p, rr2, y, 90, k, ser); y += 90; }
+    // 印: 配当方針の宣言・株主優待
+    var chips = [];
+    if (rec && rec.pol && rec.pol.length) chips.push([rec.pol.join("・") + "を宣言", SC.ok, SC.okSoft]);
+    var pk = perkNow && perkNow.code === k.code ? perkNow : null;
+    if (pk && pk.f) chips.push(["株主優待あり" + (Array.isArray(pk.f) && pk.f.length ? "  " + pk.f[0][0].toLocaleString("ja-JP") + "株で年" + pk.f[0][1].toLocaleString("ja-JP") + "円相当" : ""), SC.accent, SC.accentSoft]);
+    var cx = SX; y += 24;
+    chips.forEach(function (c) {
+      p.font("700", 22); var w = p.g.measureText(c[0]).width + 40;
+      p.rr(cx, y, w, 48, 24, c[2]); p.txt(c[0], cx + 20, y + 32, "700", 22, c[1]);
+      cx += w + 12;
+    });
+    return p;
+  }
   function shareFileName(i, n) { return "ir-check-" + (curCode() || "check") + "-" + todayStamp() + (n > 1 ? "-" + (i + 1) : "") + ".png"; }
   function shareCaption() {
     var s = summarize(), code = curCode(), name = (state.subject.name || "").normalize("NFKC");
@@ -2028,7 +2192,7 @@
   }
   function paintShare() {
     var pages = shareMode === "one" ? [drawSummary(1640, 58, true, false)]
-      : [drawSummary(1350, 54, false, true)].concat(drawTrends());
+      : [drawPage1(), drawPage2()];
     pages.forEach(function (p, i) { shareFoot(p, i + 1, pages.length); });
     var box = document.getElementById("sharePreviews");
     box.innerHTML = "";
