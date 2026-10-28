@@ -2033,16 +2033,16 @@
       function epsY(v) { return lineBot - (Math.max(0, v) - eLo) / ((eHi - eLo) || 1) * (lineBot - lineTop); }
       po.forEach(function (v, i) {
         var h1 = Math.max(3, v / pTop * barZone), bx = SX + i * bw2 + bw2 * 0.22;
-        p.rr(bx, base2 - h1, bw2 * 0.56, h1, 6, v >= 70 ? SC.bad : v >= 50 ? SC.mid : SC.ok);
+        p.rr(bx, base2 - h1, bw2 * 0.56, h1, 6, compact ? "#c9d8fa" : v >= 70 ? SC.bad : v >= 50 ? SC.mid : SC.ok);
         p.txt(v.toFixed(0) + "%", bx + bw2 * 0.28, base2 - h1 - 12, "700", 22, SC.text, "center");
         p.txt(lab[i], bx + bw2 * 0.28, base2 + 30, "500", 20, SC.sub, "center");
       });
-      var g = p.g; g.strokeStyle = SC.text; g.lineWidth = 4; g.beginPath();
+      var g = p.g, lc = compact ? SC.chart : SC.text; g.strokeStyle = lc; g.lineWidth = 4; g.lineJoin = "round"; g.beginPath();
       e.forEach(function (v, i) { var px = SX + i * bw2 + bw2 / 2, py = epsY(v); if (i) g.lineTo(px, py); else g.moveTo(px, py); });
       g.stroke();
       e.forEach(function (v, i) {
         var px = SX + i * bw2 + bw2 / 2, py = epsY(v);
-        g.beginPath(); g.arc(px, py, 9, 0, Math.PI * 2); g.fillStyle = SC.text; g.fill();
+        g.beginPath(); g.arc(px, py, compact ? 7 : 9, 0, Math.PI * 2); g.fillStyle = lc; g.fill();
         p.txt(String(v), px + 14, py - 12, "500", 19, SC.text);
       });
       y = base2 + 60;
@@ -2060,7 +2060,7 @@
       if (compact) maxLines = Math.min(maxLines, 2);
       var nl = p.measureLines(body, "500", FS, SR - SX - 48, maxLines), hgt = PAD + nl * LH + 20;
       if (y + hgt > maxY) { nl = Math.max(1, Math.floor((maxY - y - PAD - 20) / LH)); hgt = PAD + nl * LH + 20; }
-      p.rr(SX, y, SR - SX, hgt, 18, soft);
+      p.rr(SX, y, SR - SX, hgt, 18, compact ? SC.field : soft);
       p.txt(title, SX + 24, y + TOP, "700", compact ? 24 : 28, color);
       p.wrap(body, SX + 24, y + BODY, "500", FS, SC.text, SR - SX - 48, LH, nl);
       y += hgt + GAP;
