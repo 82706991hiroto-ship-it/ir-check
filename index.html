@@ -541,6 +541,7 @@
       </select></label>
       <label>並べ方<select id="sort">
         <option value="code">コード順</option>
+        <option value="total">総合利回り(優待込み)が高い順</option>
         <option value="perk">優待ありを先に</option>
         <option value="up">連続増配が長い順</option>
         <option value="po">配当性向が低い順</option>
@@ -2951,11 +2952,22 @@
     var pr = prices[r.c], d = pr && pr.f > 0 ? pr.f : r.d && r.d[r.d.length - 1];
     return pr && pr.p > 0 && d > 0 ? d / pr.p * 100 : null;
   }
+  // 景気敏感/ディフェンシブの区分(HAITO の業種の区分と同じ)
+  var DEFENSIVE = ["水産・農林業", "食料品", "パルプ・紙", "医薬品", "その他製品", "電気・ガス業", "陸運業", "倉庫・運輸関連業", "情報・通信業",
+    "小売業", "保険業", "金属製品", "不動産業", "サービス業"];
+  function classOf(sector) { return DEFENSIVE.indexOf(sector) !== -1 ? "ディフェンシブ" : "景気敏感"; }
+  // 優待利回り(優待がもらえる一番少ない株数で見る)を足した総合利回り。株価が無ければ null
+  function totalOf(r) {
+    var y = yieldOf(r), pr = prices[r.c], f = perkMap[r.c];
+    if (y == null) return null;
+    return y + (Array.isArray(f) && f.length ? f[0][1] / (f[0][0] * pr.p) * 100 : 0);
+  }
   function yieldText(r) {
     var y = yieldOf(r), pr = prices[r.c];
     if (y == null) return "";
     var d = r.d && r.d[r.d.length - 1];
     return "利回り " + (pr.f > 0 ? "予想 <b>" + y.toFixed(2) + "%</b>" + (d > 0 ? " ・ 実績 " + (d / pr.p * 100).toFixed(2) + "%" : "") : "実績 <b>" + y.toFixed(2) + "%</b>") +
+      (Array.isArray(perkMap[r.c]) && perkMap[r.c].length ? " ・ 優待込み <b>" + totalOf(r).toFixed(2) + "%</b>" : "") +
       ' <small>(' + pr.d.slice(5).replace("-", "/") + ')</small>';
   }
   var rows = [], shown = PAGE, pol = "";
@@ -2988,7 +3000,7 @@
       if (pol === "cand" && (r.p.length || !r.k)) return false;
       if (pol === "track" && !r.t) return false;
       if (pol && pol !== "cand" && pol !== "track" && r.p.indexOf(pol) === -1) return false;
-      if (sec && r.s !== sec) return false;
+      if (sec && (sec.charAt(0) === "@" ? classOf(r.s) !== sec.slice(1) : r.s !== sec)) return false;
       if (po === "low" && !(r.po != null && r.po < 30)) return false;
       if (po === "mid" && !(r.po != null && r.po >= 30 && r.po <= 50)) return false;
       if (po === "high" && !(r.po != null && r.po > 50)) return false;
@@ -3003,6 +3015,8 @@
     // 予備軍のテーマが多い順。同じなら減配なしの年数が長い順(sc に入れてある)
     if (key === "star") out.sort(function (a, b) { return (b.sc || 0) - (a.sc || 0) || b.up - a.up || a.c.localeCompare(b.c); });
     if (key === "perk") out.sort(function (a, b) { return (perkMap[b.c] ? 1 : 0) - (perkMap[a.c] ? 1 : 0) || a.c.localeCompare(b.c); });
+    // 総合利回り(配当＋優待)。株価を入れた会社だけ出せるので、出せない会社は後ろ
+    if (key === "total") out.sort(function (a, b) { var x = totalOf(a), y = totalOf(b); return (y == null ? -1 : y) - (x == null ? -1 : x) || a.c.localeCompare(b.c); });
     if (key === "up") out.sort(function (a, b) { return b.up - a.up || a.c.localeCompare(b.c); });
     if (key === "po") out.sort(function (a, b) { return (a.po == null ? 999 : a.po) - (b.po == null ? 999 : b.po); });
     // 5年分そろう会社を先に、4年で代用した会社はその後に並べる
@@ -3305,8 +3319,11 @@
     perkMap = res[1] || {};
     rows = data.rows || [];
     checkedAll = data.checked || 0;
-    var secs = {};
-    rows.forEach(function (r) { if (r.s) secs[r.s] = (secs[r.s] || 0) + 1; });
+    var secs = {}, cls = {};
+    rows.forEach(function (r) { if (r.s) { secs[r.s] = (secs[r.s] || 0) + 1; cls[classOf(r.s)] = (cls[classOf(r.s)] || 0) + 1; } });
+    ["景気敏感", "ディフェンシブ"].forEach(function (c) {
+      var o = document.createElement("option"); o.value = "@" + c; o.textContent = c + "の業種(" + (cls[c] || 0) + ")"; $("sec").appendChild(o);
+    });
     Object.keys(secs).sort(function (a, b) { return secs[b] - secs[a]; }).forEach(function (s) {
       var o = document.createElement("option"); o.value = s; o.textContent = s + "(" + secs[s] + ")"; $("sec").appendChild(o);
     });
