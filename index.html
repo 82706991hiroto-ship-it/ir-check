@@ -2439,11 +2439,16 @@
     var e = {};
     var pp = p === undefined ? cur.p : p, ff = f === undefined ? cur.f : f, ee = fe === undefined ? cur.e : fe;
     if (pp > 0) { e.p = +pp; e.d = p === undefined ? cur.d : todayStamp(); }
-    if (ff > 0) e.f = +ff;
+    // fd: 予想配当を入れた日時。HAITO と食い違ったときは新しいほうを使う
+    if (ff > 0) { e.f = +ff; if (f !== undefined && +f !== cur.f) e.fd = nowIso(); else e.fd = cur.fd || cur.d || "2000-01-01"; }
     if (ee != null && !isNaN(ee) && ee !== "") e.e = +ee;
     if (e.p || e.f || e.e != null) all[code] = e; else delete all[code];
     try { localStorage.setItem(PRICE_KEY, JSON.stringify(all)); } catch (e) {}
     if (window.HaitoSync) window.HaitoSync.soon();
+  }
+  function nowIso() {
+    var d = new Date(), z = function (n) { return ("0" + n).slice(-2); };
+    return d.getFullYear() + "-" + z(d.getMonth() + 1) + "-" + z(d.getDate()) + "T" + z(d.getHours()) + ":" + z(d.getMinutes()) + ":" + z(d.getSeconds());
   }
   function curCode() { return (state.subject.code || "").trim().toUpperCase(); }
   // 実績PER = 株価 ÷ 前期の1株利益(有報のEPS)。赤字の期は出さない
@@ -2927,9 +2932,13 @@
   function today() { var d = new Date(); return d.getFullYear() + "-" + ("0" + (d.getMonth() + 1)).slice(-2) + "-" + ("0" + d.getDate()).slice(-2); }
   function storePrice(code, p) {
     prices = loadPrices();
-    var f = prices[code] && prices[code].f;  // チェックで入れた予想配当は残す
-    if (p > 0) prices[code] = f ? { p: p, d: today(), f: f } : { p: p, d: today() };
-    else if (f) prices[code] = { f: f }; else delete prices[code];
+    // チェックやHAITOで入れた予想配当(f・入れた日時fd・EPS)は残す
+    var keep = Object.assign({}, prices[code] || {});
+    // 古い記録(fd 無し)は、予想配当の日付を前の株価の日付にしておく(株価だけ新しくしても、予想配当が新しく見えないように)
+    if (keep.f && !keep.fd) keep.fd = keep.d || "2000-01-01";
+    delete keep.p; delete keep.d;
+    if (p > 0) prices[code] = Object.assign(keep, { p: p, d: today() });
+    else if (keep.f) prices[code] = keep; else delete prices[code];
     try { localStorage.setItem(PRICE_KEY, JSON.stringify(prices)); } catch (e) {}
     if (window.HaitoSync) window.HaitoSync.soon();
   }
