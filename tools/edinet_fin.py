@@ -820,7 +820,7 @@ def cmd_update(days, only_missing=False):
     names = code_list(listed_only=only_missing) if any(not fin.get(c[0], {}).get(c) for c, _ in todo) else {}
     if not names:
         todo = [(c, x) for c, x in todo if fin.get(c[0], {}).get(c)]
-    changed = []
+    changed, polchg = [], []
 
     def one(item):
         code, x = item
@@ -839,12 +839,47 @@ def cmd_update(days, only_missing=False):
                     continue
                 name, sector = names[code]
                 name = short_name(name)
-            fin[code[0]][code] = record(parsed, name, sector)
+            new = record(parsed, name, sector)
+            note_policy_change(old, new, code, x, polchg)
+            fin[code[0]][code] = new
             changed.append(code + ("" if old else "(新規)"))
     save_fin(fin)
+    save_policy_changes(polchg)
     print("累進配当・DOEの会社", write_policy(fin), "社")
     print("更新", len(changed), "社:", " ".join(changed[:60]) + (" …" if len(changed) > 60 else ""))
     return changed
+
+
+POLICY_LOG = os.path.join(ROOT, "history", "policy-changes.json")
+
+
+def note_policy_change(old, new, code, x, log):
+    """新しい期の有報で、累進配当・DOEの記載が無くなった/新しく出てきた会社に印を付ける(アプリでお知らせする)。
+    両方の期で配当政策を読めたとき(pc)だけ比べる。読み方を直しただけの読み直し(refetch)では比べない"""
+    if not old or not old.get("pc") or not new.get("pc") or new.get("fy", "") <= old.get("fy", ""):
+        return
+    a, b = old.get("pol") or [], new.get("pol") or []
+    lost, gained = [t for t in a if t not in b], [t for t in b if t not in a]
+    if lost:
+        new["polgone"] = {"t": lost, "was": old.get("fy", ""), "q": (old.get("polq") or [])[:1], "doc": x.get("docID", "")}
+    if gained:
+        new["polnew"] = {"t": gained, "doc": x.get("docID", "")}
+    if lost or gained:
+        log.append({"d": time.strftime("%Y-%m-%d"), "c": code, "n": new.get("n", ""), "fy": new.get("fy", ""), "lost": lost, "gained": gained})
+
+
+def save_policy_changes(log):
+    """方針の変化を history/policy-changes.json に足していく(あとで振り返れるように)"""
+    if not log:
+        return
+    try:
+        cur = json.load(open(POLICY_LOG, encoding="utf-8"))
+    except (OSError, ValueError):
+        cur = []
+    os.makedirs(os.path.dirname(POLICY_LOG), exist_ok=True)
+    with open(POLICY_LOG, "w", encoding="utf-8") as f:
+        json.dump(cur + log, f, ensure_ascii=False, indent=0)
+    print("配当方針の変化", len(log), "社:", " ".join(e["c"] + ("-" + "・".join(e["lost"]) if e["lost"] else "") + ("+" + "・".join(e["gained"]) if e["gained"] else "") for e in log))
 
 
 def cmd_refetch(days, codes=None):
@@ -861,7 +896,7 @@ def cmd_refetch(days, codes=None):
             old = fin[code[0]][code]
             new = record(parsed, old.get("n"), old.get("sec", ""))
             # 長期の配当・記念配当・PERなど、別の手順で足した値は残す(longdiv で付け直す前提でも、消えたままにしない)
-            for k in ("dl", "dlo", "sp", "splits", "per", "pot", "polc", "kw", "q"):
+            for k in ("dl", "dlo", "sp", "splits", "per", "pot", "polc", "kw", "q", "polgone", "polnew"):
                 if k in old and k not in new:
                     new[k] = old[k]
             fin[code[0]][code] = new
