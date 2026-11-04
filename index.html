@@ -590,6 +590,7 @@
     </div>
     <div class="price-tools" id="priceTools" hidden>
       <a id="priceLink" target="_blank" rel="noopener noreferrer">株価・予想を見る(Yahoo!) ↗</a>
+      <a id="irbankLink" target="_blank" rel="noopener noreferrer">IR BANK ↗</a>
       <button type="button" class="btn-link" id="pasteBtn">📋 貼り付け</button>
       <span class="yield-line" id="yieldLine"></span>
     </div>
@@ -2536,6 +2537,8 @@
     renderPerk(code);
     if (!ok) return;
     document.getElementById("priceLink").href = yahooUrl(code);
+    // IR BANK は会社の業績・配当の推移を見に行くリンクだけ(数字は取り込まない)
+    document.getElementById("irbankLink").href = "https://irbank.net/" + encodeURIComponent(code);
     renderYield(code);
   }
   // 優待の有無はあとから読み込まれるので、読めたら利回りのカードだけ描き直す
