@@ -2435,9 +2435,15 @@
     var fper = after(/PER\s*\(会社予想\)[^0-9-]{0,40}?([0-9][0-9,]*(?:\.[0-9]+)?)\s*倍/);
     var minBuy = after(/最低購入代金[^0-9]*?([0-9][0-9,]*)/), unit = after(/単元株数[^0-9]*?([0-9][0-9,]*)/);
     var byPer = fper > 0 && feps > 0, exact = byPer || (minBuy > 0 && unit > 0);
-    var price = byPer ? fper * feps : minBuy > 0 && unit > 0 ? minBuy / unit : fdiv > 0 && yld > 0 ? fdiv / (yld / 100) : NaN;
+    // 配当÷利回りでも株価を出して、PER×EPSと食い違えば(Yahooの画面でPERとEPSの元の利益が違う会社がある。例: 三菱HCキャピタル)
+    // PER×EPSは使わず、最低購入代金÷単元株数(利回りと合うとき)か、配当÷利回りにする
+    var byYld = fdiv > 0 && yld > 0 ? fdiv / (yld / 100) : NaN, byMin = minBuy > 0 && unit > 0 ? minBuy / unit : NaN;
+    function near(a, b) { return Math.abs(a / b - 1) <= 0.01; }
+    if (byPer && byYld > 0 && !near(fper * feps, byYld)) { byPer = false; if (byMin > 0 && !near(byMin, byYld)) byMin = NaN; exact = byMin > 0; }
+    var price = byPer ? fper * feps : byMin > 0 ? byMin : byYld;
     // PER×EPSは小数の丸めで±0.05%ほどずれるので、1,000円以上は円単位に丸める
     if (byPer) price = price >= 1000 ? Math.round(price) : Math.round(price * 10) / 10;
+    else if (!(byMin > 0) && price > 0) price = price >= 1000 ? Math.round(price) : Math.round(price * 10) / 10;
     if (!(fdiv > 0) && !(price > 0) && isNaN(feps)) return null;
     return { price: price > 0 ? Math.round(price * 10) / 10 : NaN, approx: !exact, fdiv: fdiv, feps: feps, fsp: fsp };
   }
