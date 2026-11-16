@@ -11,6 +11,16 @@ import argparse, datetime as dt, glob, json, os, re, sys
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
+def read_haito(path):
+    """HAITO の内蔵データを読む。データは index.html から data.js に分かれたので、隣に data.js があれば一緒に読む
+    (index.html を渡しても data.js を渡しても同じ)"""
+    out = open(path, encoding="utf-8").read()
+    side = os.path.join(os.path.dirname(os.path.abspath(path)), "data.js")
+    if os.path.exists(side) and os.path.abspath(path) != side:
+        out += "\n" + open(side, encoding="utf-8").read()
+    return out
+
+
 
 def load_fin():
     fin = {}
@@ -115,7 +125,7 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--haito", required=True, help="haito-dashboard の index.html")
     a = ap.parse_args()
-    html = open(a.haito, encoding="utf-8").read()
+    html = read_haito(a.haito)
     info = json.loads(re.search(r"var CODE_INFO_MAP = (\{.*?\});\n", html).group(1))
     split_map, special_map = js_map(html, "SPLIT_MAP"), js_map(html, "SPECIAL_MAP")
     fin = load_fin()

@@ -20,6 +20,16 @@ RELS = ["Prior4Year", "Prior3Year", "Prior2Year", "Prior1Year", "CurrentYear"]  
 NICE = [1.1, 1.2, 1.25, 1.5, 2, 2.5, 3, 4, 5, 6, 8, 10, 15, 20, 25, 30, 40, 50, 100]
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
+def read_haito(path):
+    """HAITO の内蔵データを読む。データは index.html から data.js に分かれたので、隣に data.js があれば一緒に読む
+    (index.html を渡しても data.js を渡しても同じ)"""
+    out = open(path, encoding="utf-8").read()
+    side = os.path.join(os.path.dirname(os.path.abspath(path)), "data.js")
+    if os.path.exists(side) and os.path.abspath(path) != side:
+        out += "\n" + open(side, encoding="utf-8").read()
+    return out
+
+
 # 項目ごとの要素名。前にあるものほど優先(IFRS・米国基準の連結 → 日本基準)
 SUMMARY = {
     "sales": ["RevenueIFRS", "RevenuesUSGAAP", "NetSales", "OperatingRevenue1", "OperatingRevenue2",
@@ -600,7 +610,7 @@ def attach_long(fin, haito_html):
 
     HAITO の最新期が fin と同じならそのまま、1期遅れていれば fin の当期を足す。合わなければ付けない。
     """
-    html = open(haito_html, encoding="utf-8").read()
+    html = read_haito(haito_html)
     info = json.loads(re.search(r"var CODE_INFO_MAP = (\{.*?\});\n", html).group(1))
     spath = os.path.join(os.path.dirname(os.path.abspath(haito_html)), "tools", "edinet", "state.json")
     hstate = json.load(open(spath)) if os.path.exists(spath) else {}

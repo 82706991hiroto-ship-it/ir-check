@@ -13,3 +13,4 @@
 - チェックの株価の欄の横に「IR BANK ↗」(irbank.net/コード)。リンクだけで、数字は取り込まない。
 - Yahooの参考指標の株価: PER×EPSが配当÷利回りと1%以上食い違えば使わない(三菱HCキャピタルは12.09×90.62=1,096円だが実際は1,348.5円)。そのときは最低購入代金÷単元株数(利回りと合えば)、無ければ配当÷利回り(概算)。
 - 新しい版のお知らせ・保存の失敗・画面のエラーを下に固定のお知らせで出す(window.irNotice、.app-notice。HAITO の NOTES の「弱点の手当て」と同じ仕組み)。
+- HAITO の内蔵データは index.html から data.js に分かれた。check_data.py・edinet_fin.py は read_haito() で、--haito に index.html を渡されても隣の data.js を一緒に読む(ワークフローはそのまま)。
