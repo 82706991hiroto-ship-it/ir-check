@@ -466,6 +466,12 @@
   .more { display: block; width: 100%; margin-top: 12px; font: inherit; font-size: 14px; padding: 12px; border-radius: 12px;
     border: 1px solid var(--line); background: var(--card); color: var(--text); cursor: pointer; }
   .empty { color: var(--text-2); font-size: 13px; padding: 12px 0; }
+  .app-notice { position: fixed; left: 12px; right: 12px; bottom: calc(78px + env(safe-area-inset-bottom, 0px)); z-index: 70; max-width: 520px; margin: 0 auto; display: flex; align-items: center; gap: 10px;
+    background: #14232e; color: #f4f1ea; border-radius: 14px; padding: 12px 14px; font-size: 13px; line-height: 1.55; box-shadow: 0 10px 30px rgba(0,0,0,.25); }
+  .app-notice + .app-notice { bottom: calc(150px + env(safe-area-inset-bottom, 0px)); }
+  .app-notice span { flex: 1; }
+  .app-notice button { flex: none; font: inherit; font-weight: 700; font-size: 12.5px; padding: 7px 12px; border-radius: 999px; border: 0; background: #d9b26a; color: #14232e; cursor: pointer; }
+  .app-notice button.x { background: transparent; color: #a9b3bd; padding: 4px 6px; font-size: 16px; }
   .notes { font-size: 12px; color: var(--text-2); line-height: 1.9; padding: 0 4px; }
   .notes p { margin: 0 0 10px; }
   .notes .note-label { display: inline-block; font-size: 10.5px; font-weight: 700; color: var(--text-2); background: var(--field);
@@ -697,6 +703,40 @@
 <script src="../haito-dashboard/sync-config.js"></script>
 <script src="../haito-dashboard/sync-core.js"></script>
 <script src="../haito-dashboard/splits-core.js"></script>
+<script>
+// 画面の下に出す、消えないお知らせ(新しい版・保存の失敗・表示のエラー)。HAITO と同じ仕組み
+(function () {
+  "use strict";
+  function notice(kind, text, btnText, onClick) {
+    var id = "notice-" + kind, el = document.getElementById(id);
+    if (!el) { el = document.createElement("div"); el.id = id; el.className = "app-notice"; el.setAttribute("role", "status"); document.body.appendChild(el); }
+    el.innerHTML = "";
+    var sp = document.createElement("span"); sp.textContent = text; el.appendChild(sp);
+    if (btnText) { var b = document.createElement("button"); b.type = "button"; b.textContent = btnText; b.addEventListener("click", onClick); el.appendChild(b); }
+    var x = document.createElement("button"); x.type = "button"; x.className = "x"; x.setAttribute("aria-label", "閉じる"); x.textContent = "×";
+    x.addEventListener("click", function () { el.remove(); }); el.appendChild(x);
+  }
+  window.irNotice = notice;
+  // サイトは最大10分(ホーム画面のアプリはもっと長く)前のページを使い続けることがある。新しい版が出ていたら知らせる
+  var loaded = new Date(document.lastModified).getTime(), told = false;
+  function check() {
+    if (told || document.hidden || navigator.onLine === false || !(loaded > 0) || !/^https?:$/.test(location.protocol)) return;
+    fetch(location.pathname, { method: "HEAD", cache: "no-store" }).then(function (r) {
+      var lm = r.ok && r.headers.get("last-modified"), t = lm ? new Date(lm).getTime() : 0;
+      if (t > loaded + 5000) { told = true; notice("update", "チェックシートの新しい版があります。", "更新する", function () { location.reload(); }); }
+    }, function () {});
+  }
+  setTimeout(check, 3000);
+  setInterval(check, 10 * 60 * 1000);
+  document.addEventListener("visibilitychange", function () { if (!document.hidden) check(); });
+  var errorTold = false;
+  window.addEventListener("error", function (e) {
+    if (errorTold || !e || !e.message || /ResizeObserver|Script error/i.test(e.message)) return;
+    errorTold = true;
+    notice("error", "表示の途中で問題が起きました。保存した評価は消えていません。", "再読み込み", function () { location.reload(); });
+  });
+})();
+</script>
 <script>
 (function () {
   "use strict";
@@ -1153,8 +1193,15 @@
 
   var state = loadState();
 
+  var saveFailed = false;
   function save() {
-    try { localStorage.setItem(STORAGE_KEY, JSON.stringify(state)); } catch (e) {}
+    try {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+      if (saveFailed) { saveFailed = false; var sn = document.getElementById("notice-save"); if (sn) sn.remove(); }
+    } catch (e) {
+      // 容量がいっぱい・プライベートブラウズなどで保存できないと、閉じたときに消える。黙って捨てずに知らせる
+      if (!saveFailed) { saveFailed = true; window.irNotice("save", "この端末に保存できませんでした(ブラウザの保存容量がいっぱいか、プライベートブラウズかもしれません)。このまま閉じると、今の採点は残りません。"); }
+    }
     if (window.HaitoSync) window.HaitoSync.soon();
   }
 
